@@ -15,6 +15,7 @@
 // This example shows how to create a rectilinear grid.
 //
 
+
 #include "vtkRenderer.h"
 #include "vtkRenderWindow.h"
 #include "vtkRenderWindowInteractor.h"
@@ -265,3 +266,4 @@ int main(int argc, char* argv[])
 
     return 0;
 }
+

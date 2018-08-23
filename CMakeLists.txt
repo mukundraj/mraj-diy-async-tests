@@ -32,9 +32,9 @@ endif                       (NOT diy_thread)
 # DIY
 find_path                   (DIY_INCLUDE_DIRS diy/types.h)
 
-# VTK
-find_package                (VTK REQUIRED)
-include                     (${VTK_USE_FILE})
+## VTK
+#find_package                (VTK REQUIRED)
+#include                     (${VTK_USE_FILE})
 
 # Include dirs
 set                         (CMAKE_INCLUDE_SYSTEM_FLAG_CXX "-isystem")
