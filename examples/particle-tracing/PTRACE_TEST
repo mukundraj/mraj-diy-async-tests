@@ -1,0 +1,33 @@
+#!/bin/bash
+
+# number of procs
+num_procs=4
+
+# executable
+exe=./ptrace
+
+# inout file
+infile="../../../sample_data/tornado/1.bov"
+
+# max number of advection steps
+max_steps=1024
+
+# seed rate (seed particles every this many grid points in each dimension)
+sr=8
+
+# domain extents
+mins="0 0 0"
+maxs="127 127 127"
+
+# options
+# --blocks <totblocks> --threads <num_threads> --vec-scale <vector scaling factor>
+# --in-memory <num_mem_blocks> --storage <path to out of core storage> --hdr-bytes <byte ofst>
+# --max-rounds <max_rounds>
+opts="--blocks 8 --max-rounds 100"
+
+# program arguments
+args="$opts $infile $max_steps $sr $mins $maxs"
+
+# run command
+mpiexec -n $num_procs $exe $args
+
