@@ -1,15 +1,14 @@
-# Integration of DIY with VTK
+# Particle tracing test case for DIY Iexchange
 
-A set of examples of vtk filters and data models written using DIY block-parallelism.
+Iexchange version can be built by setting the macro variable "IEXCHANGE" equal to 1 in examples/particle-tracing/ptrace.cpp. The block synchronous version can be built by setting "IEXCHANGE" equal to 0.
 
 # Requirements
 
-The latest version of DIY, and hence these examples, require a C++11 compiler. VTK 7.1 is required.
+The latest version of DIY, and hence these examples, require a C++11 compiler. VTK 7.1 is required for visualization of streamlines only.
 
 # Examples
 
-- vtk-data-models: various VTK data models wrapped in DIY blocks
-- particle-tracing: vtkStreamTracer with DIY.
+- particle-tracing: particle tracing with DIY.
 
 # Installation
 
@@ -56,10 +55,7 @@ make install
 
 # Execution
 
-## Data model example
-```
-cd path/to/diy2-vtk7/install/examples/vtk-data-models
-mpiexec -n <num_procs> ./diy-rgrid
+
 
 ```
 

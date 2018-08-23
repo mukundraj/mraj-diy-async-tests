@@ -117,7 +117,7 @@ struct Block
         // copied from http://www.vtk.org/Wiki/VTK/Examples/Cxx/GeometricObjects/PolyLine
         void render()
             {
-                printf("%ld", segments.size());
+//                printf("%ld", segments.size());
                 // vtk points
                 vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
 
