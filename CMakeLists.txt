@@ -2,6 +2,7 @@ project                     (diy2-vtk7)
 cmake_minimum_required      (VERSION 2.8)
 
 option                      (diy_thread     "Enable diy threading"             OFF)
+option (WITH_VTK OFF)
 
 if                          (bgq)
     add_definitions         (-DBGQ)
@@ -32,9 +33,11 @@ endif                       (NOT diy_thread)
 # DIY
 find_path                   (DIY_INCLUDE_DIRS diy/types.h)
 
+if (WITH_VTK)
 # VTK
 find_package                (VTK REQUIRED)
 include                     (${VTK_USE_FILE})
+endif ()
 
 # Include dirs
 set                         (CMAKE_INCLUDE_SYSTEM_FLAG_CXX "-isystem")

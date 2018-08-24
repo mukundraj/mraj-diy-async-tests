@@ -21,6 +21,8 @@
 #include <diy/reduce.hpp>
 #include <diy/partners/merge.hpp>
 
+#ifdef WITH_VTK
+
 #include <vtkNew.h>
 #include <vtkUnstructuredGrid.h>
 #include <vtkPoints.h>
@@ -39,6 +41,8 @@
 #include <vtkProcessIdScalars.h>
 #include <vtkVersion.h>
 
+#endif
+
 #include <cassert>
 #include <cstring>
 
@@ -52,6 +56,8 @@
 
 #include <fstream>
 #include <string.h>
+
+
 
 using namespace std;
 
@@ -588,9 +594,9 @@ int main(int argc, char **argv)
     int hdr_bytes   = 0;                      // num bytes header before start of data in infile
     int max_rounds  = 0;                      // max number of rounds to trace (0 = no limit)
 
-    // print vtk version
-    if (world.rank() == 0)
-        std::cerr << vtkVersion::GetVTKSourceVersion() << std::endl;
+//    // print vtk version
+//    if (world.rank() == 0)
+//        std::cerr << vtkVersion::GetVTKSourceVersion() << std::endl;
 
     Options ops(argc, argv);
     ops
@@ -716,12 +722,13 @@ int main(int argc, char **argv)
     diy::RegularMergePartners  partners(decomposer, k);
     diy::reduce(master, assigner, partners, &merge_traces);
 
+#ifdef WITH_VTK
     if (world.rank() == 0)
     {
         fprintf(stderr, "converting particle traces to vtk polylines and rendering\n");
         ((Block*)master.block(0))->render();
     }
-
+#endif
 
 
     return 0;

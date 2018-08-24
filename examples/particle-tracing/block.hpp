@@ -19,6 +19,7 @@
 #include <diy/reduce.hpp>
 #include <diy/partners/merge.hpp>
 
+#ifdef WITH_VTK
 #include <vtkVersion.h>
 #include <vtkSmartPointer.h>
 #include <vtkCellArray.h>
@@ -33,6 +34,7 @@
 #include <vtkRenderer.h>
 #include <vtkRenderWindowInteractor.h>
 #include <vtkPolyData.h>
+#endif
 
 typedef diy::DiscreteBounds            Bounds;
 typedef diy::RegularGridLink           RGLink;
@@ -112,6 +114,7 @@ struct Block
                 }
             }
 
+#ifdef WITH_VTK
         // convert vector of particle trajectories to vtk polylines and render them
         // TODO: use vtk data model from the outset?
         // copied from http://www.vtk.org/Wiki/VTK/Examples/Cxx/GeometricObjects/PolyLine
@@ -187,13 +190,18 @@ struct Block
                 render();
             }
 
+#endif
+
     float                *vel[3];            // pointers to vx, vy, vz arrays (v[0], v[1], v[2])
     size_t               nvecs;              // number of velocity vectors
     int                  init, done;         // initial and done flags
+    vector<Segment> segments;                // finished segments of particle traces
+
+#ifdef WITH_VTK
     vtkNew<vtkPoints>    points;             // points to be traced
     vtkNew<vtkPolyData>  all_polydata;       // finished streamlines
     vtkNew<vtkCellArray> all_cells;          // all streamlines as vtk cells
     vtkNew<vtkPoints>    all_points;         // all points in all streamlines
+#endif
 
-    vector<Segment> segments;                // finished segments of particle traces
 };
