@@ -50,6 +50,9 @@
 
 #include <pnetcdf.h>
 
+#include <fstream>
+#include <string.h>
+
 using namespace std;
 
 #define IEXCHANGE 1
@@ -122,7 +125,7 @@ struct AddAndRead : public AddBlock
         vector<int> shape(3);
         for (size_t i = 0; i < 3; i++)
             shape[2 - i] = domain.max[i] - domain.min[i] + 1;
-//        diy::io::BOV reader(in, shape, hdr_bytes);
+        //        diy::io::BOV reader(in, shape, hdr_bytes);
 
         Bounds r_bounds;
         r_bounds.min[0] = bounds.min[2];
@@ -131,8 +134,7 @@ struct AddAndRead : public AddBlock
         r_bounds.max[1] = bounds.max[1];
         r_bounds.min[2] = bounds.min[0];
         r_bounds.max[2] = bounds.max[0];
-        printf("%d %d %d %d %d %d \n", r_bounds.min[0], r_bounds.max[0], r_bounds.min[1],r_bounds.max[1],
-                r_bounds.min[2], r_bounds.max[2]);
+
 
 
         start = (MPI_Offset*) calloc(ndims, sizeof(MPI_Offset));
@@ -146,7 +148,7 @@ struct AddAndRead : public AddBlock
 
             start[0] =  0; start[1] = r_bounds.min[0]; start[2] = r_bounds.min[1]; start[3] = r_bounds.min[2];
         }else if(ndims==3){
-            printf("in ndims 3\n");
+
             count[0] = r_bounds.max[0] - r_bounds.min[0]+1;
             count[1] = r_bounds.max[1] - r_bounds.min[1]+1;
             count[2] = r_bounds.max[2] - r_bounds.min[2]+1;
@@ -154,8 +156,8 @@ struct AddAndRead : public AddBlock
             start[0] = r_bounds.min[0]; start[1] = r_bounds.min[1]; start[2] = r_bounds.min[2];
         }
 
-        std::cout<<"counts"<<count[0]<<" "<<count[1]<<" "<<count[2]<<"\n";
-        std::cout<<"starts"<<start[0]<<" "<<start[1]<<" "<<start[2]<<"\n";
+        //        std::cout<<"counts"<<count[0]<<" "<<count[1]<<" "<<count[2]<<"\n";
+        //        std::cout<<"starts"<<start[0]<<" "<<start[1]<<" "<<start[2]<<"\n";
 
         size_t nvecs =
                 (bounds.max[0] - bounds.min[0] + 1) *
@@ -345,7 +347,7 @@ void TraceBlock(Block *b,
 
             // TODO: deal with multiple dests, also match with the ASYNC case
             // either send to first block that is not me or perturb the point along velocity
-//          for (size_t j = 0; j < dests.size(); j++)
+            //          for (size_t j = 0; j < dests.size(); j++)
             for (size_t j = 0; j < 1; j++)
             {
                 diy::BlockID bid = l->target(dests[j]);
@@ -646,56 +648,67 @@ int main(int argc, char **argv)
 
     double time_start = MPI_Wtime();
 
+
+
 #if IEXCHANGE==0
-    // particle tracing for either a maximum number of rounds or, if max_rounds == 0,
-    // then for inifinitely many rounds until breaking out when done is true
-     int stop = (max_rounds ? max_rounds : 1);
-    int incr = (max_rounds ? 1 : 0);
-    for (int round = 0; round < stop; round += incr)
-    {
-        master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
-        { TraceBlock(b,
-                     cp,
-                     decomposer,
-                     assigner,
-                     max_steps,
-                     seed_rate,
-                     share_face); });
-         master.exchange();
-
-
-        int init, done;
-        for (int i = 0; i < master.size(); i++)
+        // particle tracing for either a maximum number of rounds or, if max_rounds == 0,
+        // then for inifinitely many rounds until breaking out when done is true
+        int stop = (max_rounds ? max_rounds : 1);
+        int incr = (max_rounds ? 1 : 0);
+        for (int round = 0; round < stop; round += incr)
         {
-            init = master.proxy(i).get<int>();
-            done = master.proxy(i).get<int>();
+            master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+            { TraceBlock(b,
+                         cp,
+                         decomposer,
+                         assigner,
+                         max_steps,
+                         seed_rate,
+                         share_face); });
+            master.exchange();
+
+
+            int init, done;
+            for (int i = 0; i < master.size(); i++)
+            {
+                init = master.proxy(i).get<int>();
+                done = master.proxy(i).get<int>();
+            }
+
+            if (world.rank() == 0)
+                fprintf(stderr, "round=%d, INIT=%d, DONE=%d\n", round, init, done);
+
+            if (init == done && done != 0)
+                break;
         }
-
-        if (world.rank() == 0)
-            fprintf(stderr, "round=%d, INIT=%d, DONE=%d\n", round, init, done);
-
-        if (init == done && done != 0)
-            break;
-    }
 #endif
 
 #if IEXCHANGE==1
-    master.iexchange([&](Block* b, const diy::Master::ProxyWithLink& cp) -> bool
-    { bool val = trace_segment(b,
-                               cp,
-                               decomposer,
-                               assigner,
-                               max_steps,
-                               seed_rate,
-                               share_face);
-        return val;
-    });
+        master.iexchange([&](Block* b, const diy::Master::ProxyWithLink& cp) -> bool
+        { bool val = trace_segment(b,
+                                   cp,
+                                   decomposer,
+                                   assigner,
+                                   max_steps,
+                                   seed_rate,
+                                   share_face);
+            return val;
+        });
 
 #endif
 
+
+
     double time_end = MPI_Wtime();
+//    if (world.rank() == 0)
+//        fprintf(stderr, "wtime=%lf\n", time_end - time_start);
+
     if (world.rank() == 0)
-        fprintf(stderr, "wtime=%lf\n", time_end - time_start);
+    {
+        std::cout<<"resultline,"<<std::to_string(seed_rate)<<","<<std::to_string(world.size())<<","
+                     <<std::to_string(time_end - time_start)<<"\n";
+
+    }
 
 
     // merge-reduce traces to one block
@@ -708,7 +721,6 @@ int main(int argc, char **argv)
         fprintf(stderr, "converting particle traces to vtk polylines and rendering\n");
         ((Block*)master.block(0))->render();
     }
-
 
 
 
