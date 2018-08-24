@@ -1,5 +1,7 @@
 add_executable              (ptrace ptrace.cpp advect.cpp)
-target_link_libraries       (ptrace ${libraries})
+
+
+target_link_libraries       (ptrace ${libraries} bil ${PNETCDF_LIBRARY})
 
 install(TARGETS ptrace
         DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/particle-tracing

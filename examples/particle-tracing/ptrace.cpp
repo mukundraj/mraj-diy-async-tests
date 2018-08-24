@@ -48,10 +48,18 @@
 
 #include "advect.h"
 
+#include <pnetcdf.h>
+
 using namespace std;
 
 #define IEXCHANGE 1
 
+
+static void handle_error(int status, int lineno)
+{
+    fprintf(stderr, "Error at line %d: %s\n", lineno, ncmpi_strerror(status));
+    MPI_Abort(MPI_COMM_WORLD, 1);
+}
 
 // add a block to the master
 struct AddBlock
@@ -97,24 +105,24 @@ struct AddAndRead : public AddBlock
                     const RGLink& link) const
     {
         Block* b = AddBlock::operator()(gid, core, bounds, domain, link);
+        MPI_Offset *start, *count;
+        float *data_u=NULL, *data_v=NULL, *data_w=NULL;
 
-        // read velocity vectors, assumes 3d
-        diy::mpi::io::file in(world, infile, diy::mpi::io::file::rdonly);
-        size_t sz = in.size() / sizeof(float);
-        if (sz % 3 != 0)
-        {
-            if (world.rank() == 0)
-                fprintf(stderr, "Something is wrong: number of floats in BOV file "
-                                "is not divisible by 3, %lu %% 3 != 0\n", sz);
-            exit(1);
-        }
+        int ncfile, ndims, nvars, ngatts, unlimited;
+        int ret;
+        ret = ncmpi_open(world, infile, NC_NOWRITE, MPI_INFO_NULL,&ncfile);
+        if (ret != NC_NOERR) handle_error(ret, __LINE__);
+
+        ret = ncmpi_inq(ncfile, &ndims, &nvars, &ngatts, &unlimited);
+        if (ret != NC_NOERR) handle_error(ret, __LINE__);
+
 
         // reversed order of shape and bounds needed because the sample data file
         // is linearized in row-major (C) order
         vector<int> shape(3);
         for (size_t i = 0; i < 3; i++)
             shape[2 - i] = domain.max[i] - domain.min[i] + 1;
-        diy::io::BOV reader(in, shape, hdr_bytes);
+//        diy::io::BOV reader(in, shape, hdr_bytes);
 
         Bounds r_bounds;
         r_bounds.min[0] = bounds.min[2];
@@ -123,6 +131,31 @@ struct AddAndRead : public AddBlock
         r_bounds.max[1] = bounds.max[1];
         r_bounds.min[2] = bounds.min[0];
         r_bounds.max[2] = bounds.max[0];
+        printf("%d %d %d %d %d %d \n", r_bounds.min[0], r_bounds.max[0], r_bounds.min[1],r_bounds.max[1],
+                r_bounds.min[2], r_bounds.max[2]);
+
+
+        start = (MPI_Offset*) calloc(ndims, sizeof(MPI_Offset));
+        count = (MPI_Offset*) calloc(ndims, sizeof(MPI_Offset));
+
+        if (ndims==4){
+            count[0] = 1;
+            count[1] = r_bounds.max[0] - r_bounds.min[0]+1;
+            count[2] = r_bounds.max[1] - r_bounds.min[1]+1;
+            count[3] = r_bounds.max[2] - r_bounds.min[2]+1;
+
+            start[0] =  0; start[1] = r_bounds.min[0]; start[2] = r_bounds.min[1]; start[3] = r_bounds.min[2];
+        }else if(ndims==3){
+            printf("in ndims 3\n");
+            count[0] = r_bounds.max[0] - r_bounds.min[0]+1;
+            count[1] = r_bounds.max[1] - r_bounds.min[1]+1;
+            count[2] = r_bounds.max[2] - r_bounds.min[2]+1;
+
+            start[0] = r_bounds.min[0]; start[1] = r_bounds.min[1]; start[2] = r_bounds.min[2];
+        }
+
+        std::cout<<"counts"<<count[0]<<" "<<count[1]<<" "<<count[2]<<"\n";
+        std::cout<<"starts"<<start[0]<<" "<<start[1]<<" "<<start[2]<<"\n";
 
         size_t nvecs =
                 (bounds.max[0] - bounds.min[0] + 1) *
@@ -130,7 +163,17 @@ struct AddAndRead : public AddBlock
                 (bounds.max[2] - bounds.min[2] + 1);
         vector<float> values(nvecs * 3); // temporary contiguous buffer of input vector values
 
-        reader.read(r_bounds, &values[0], true, 3);
+        data_u = (float*) calloc(nvecs, sizeof(float));
+        data_v = (float*) calloc(nvecs, sizeof(float));
+        data_w = (float*) calloc(nvecs, sizeof(float));
+        ret = ncmpi_get_vara_float_all(ncfile, 0, start, count, data_u);
+        if (ret != NC_NOERR) handle_error(ret, __LINE__);
+        ret = ncmpi_get_vara_float_all(ncfile, 1, start, count, data_v);
+        if (ret != NC_NOERR) handle_error(ret, __LINE__);
+        ret = ncmpi_get_vara_float_all(ncfile, 2, start, count, data_w);
+        if (ret != NC_NOERR) handle_error(ret, __LINE__);
+
+
 
         // copy from temp values into block
         b->vel[0] = new float[nvecs];
@@ -139,40 +182,21 @@ struct AddAndRead : public AddBlock
         b->nvecs = nvecs;
         for (size_t i = 0; i < nvecs; i++)
         {
-            b->vel[0][i] = values[3 * i    ] * vec_scale;
-            b->vel[1][i] = values[3 * i + 1] * vec_scale;
-            b->vel[2][i] = values[3 * i + 2] * vec_scale;
 
-            // debug: set synthetic vector
-            // size_t j, k, l;
-            // size_t nx = bounds.max[0] - bounds.min[0] + 1;
-            // size_t ny = bounds.max[1] - bounds.min[1] + 1;
-            // size_t nz = bounds.max[2] - bounds.min[2] + 1;
-            // j = bounds.min[0] + i % nx;
-            // k = bounds.min[1] + (i / nx) % ny;
-            // l = bounds.min[2] + i / (nx * ny);
+            b->vel[0][i] = data_u[i] * vec_scale;
+            b->vel[1][i] = data_v[i] * vec_scale;
+            b->vel[2][i] = data_w[i] * vec_scale;
 
-            // // fprintf(stderr, "jkl [%d %d %d]\n", j, k, l);
-            // float mag = sqrt(j * j + k * k + l * l);
-            // if (mag)
-            // {
-            //     b->vel[0][i] = (float)j / mag;
-            //     b->vel[1][i] = (float)k / mag;
-            //     b->vel[2][i] = (float)l / mag;
-            // }
-            // else
-            // {
-            //     b->vel[0][i] = 0.0;
-            //     b->vel[1][i] = 0.0;
-            //     b->vel[2][i] = 0.0;
-            // }
-            // b->vel[2][i] = 0.0;          // 2d velocity easier to debug
-
-            // if (gid == 0)
-            //     fprintf(stderr, "gid = %d i = %d [vx, vy, vz] = [%.3f %.3f %.3f]\n",
-            //             gid, i, b->vel[0][i], b->vel[1][i], b->vel[2][i]);
         }
+
+        ret = ncmpi_close(ncfile);
+        free(start);
+        free(count);
+        free(data_u);
+        free(data_v);
+        free(data_w);
     }
+
 
     const char*	infile;
     diy::mpi::communicator world;

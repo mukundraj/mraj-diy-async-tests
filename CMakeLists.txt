@@ -47,7 +47,16 @@ set                         (libraries
                              ${libraries}
                              ${CMAKE_THREAD_LIBS_INIT}
                              ${VTK_LIBRARIES})
+# Find PnetCDF
+find_path(PNETCDF_DIR lib/libpnetcdf.a)
+set (PNETCDF_INCLUDE_DIR ${PNETCDF_DIR}/include)
+set (PNETCDF_LIBRARY ${PNETCDF_DIR}/lib/libpnetcdf.a)
+include_directories (${PNETCDF_INCLUDE_DIR})
+
+# find_package (NetCDF REQUIRED)
+# include_directories (${NETCDF_INCLUDE_DIR})
 
 # Subdirectories
 add_subdirectory           (examples)
+
 
