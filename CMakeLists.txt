@@ -3,6 +3,7 @@ cmake_minimum_required      (VERSION 2.8)
 
 option                      (diy_thread     "Enable diy threading"             OFF)
 option (WITH_VTK OFF)
+option (WITH_TIMEINFO ON)
 
 if                          (bgq)
     add_definitions         (-DBGQ)
@@ -55,6 +56,7 @@ find_path(PNETCDF_DIR lib/libpnetcdf.a)
 set (PNETCDF_INCLUDE_DIR ${PNETCDF_DIR}/include)
 set (PNETCDF_LIBRARY ${PNETCDF_DIR}/lib/libpnetcdf.a)
 include_directories (${PNETCDF_INCLUDE_DIR})
+
 
 # find_package (NetCDF REQUIRED)
 # include_directories (${NETCDF_INCLUDE_DIR})

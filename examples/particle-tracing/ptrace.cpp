@@ -382,7 +382,7 @@ void TraceBlock(Block *b,
 
 #if IEXCHANGE==1
 bool trace_segment(Block *b,
-                   const diy::Master::ProxyWithLink &cp,
+                   const diy::Master::IProxyWithLink &icp,
                    const Decomposer&            decomposer,
                    const diy::Assigner&         assigner,
                    const int                    max_steps,
@@ -391,9 +391,9 @@ bool trace_segment(Block *b,
 
 {
 
-    const int rank              = cp.master()->communicator().rank();
-    const int gid               = cp.gid();
-    diy::RegularLink<Bounds> *l = static_cast<diy::RegularLink<Bounds>*>(cp.link());
+    const int rank              = icp.master()->communicator().rank();
+    const int gid               = icp.gid();
+    diy::RegularLink<Bounds> *l = static_cast<diy::RegularLink<Bounds>*>(icp.link());
     map<diy::BlockID, vector<Pt> > outgoing_pts;
 
     vector<EndPt> particles;
@@ -466,10 +466,10 @@ bool trace_segment(Block *b,
     for (size_t i = 0; i < l->size(); ++i)
     {
         int nbr_gid = l->target(i).gid;
-        while (cp.incoming(nbr_gid))      // FIXED: mraj: changed from if to while
+        while (icp.incoming(nbr_gid))      // FIXED: mraj: changed from if to while
         {
             EndPt incoming_endpt;
-            cp.dequeue(nbr_gid, incoming_endpt);
+            icp.dequeue(nbr_gid, incoming_endpt);
             particles.push_back(incoming_endpt);
         }
 
@@ -517,7 +517,7 @@ bool trace_segment(Block *b,
             for (size_t j = 0; j < 1; j++)
             {
                 diy::BlockID bid = l->target(dests[j]);
-                cp.enqueue(bid, out_pt);
+                icp.enqueue(bid, out_pt);
                 //                outgoing_endpts[bid].push_back(out_pt);
                 // fprintf(stderr, "gid %d enqueue [%.3f %.3f %.3f] to gid %d\n",
                 //         gid, out_pt[0], out_pt[1], out_pt[2], bid.gid);
@@ -652,9 +652,10 @@ int main(int argc, char **argv)
         fprintf(stderr, "starting particle tracing\n");
     }
 
+//#ifdef WITH_TIMEINFO
+    MPI_Barrier(world);
     double time_start = MPI_Wtime();
-
-
+//#endif
 
 #if IEXCHANGE==0
         // particle tracing for either a maximum number of rounds or, if max_rounds == 0,
@@ -690,9 +691,9 @@ int main(int argc, char **argv)
 #endif
 
 #if IEXCHANGE==1
-        master.iexchange([&](Block* b, const diy::Master::ProxyWithLink& cp) -> bool
+        master.iexchange([&](Block* b, const diy::Master::IProxyWithLink& icp) -> bool
         { bool val = trace_segment(b,
-                                   cp,
+                                   icp,
                                    decomposer,
                                    assigner,
                                    max_steps,
@@ -704,10 +705,9 @@ int main(int argc, char **argv)
 #endif
 
 
-
+//#ifdef WITH_TIMEINFO
+    MPI_Barrier(world);
     double time_end = MPI_Wtime();
-//    if (world.rank() == 0)
-//        fprintf(stderr, "wtime=%lf\n", time_end - time_start);
 
     if (world.rank() == 0)
     {
@@ -716,7 +716,7 @@ int main(int argc, char **argv)
                 <<std::to_string(time_end - time_start)<<"\n";
 
     }
-
+//#endif
 
     // merge-reduce traces to one block
     int k = 2;                               // the radix of the k-ary reduction tree
