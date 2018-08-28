@@ -466,7 +466,7 @@ bool trace_segment(Block *b,
     for (size_t i = 0; i < l->size(); ++i)
     {
         int nbr_gid = l->target(i).gid;
-        if (cp.incoming(nbr_gid))      // FIXME: make this while
+        while (cp.incoming(nbr_gid))      // FIXED: mraj: changed from if to while
         {
             EndPt incoming_endpt;
             cp.dequeue(nbr_gid, incoming_endpt);
@@ -711,8 +711,9 @@ int main(int argc, char **argv)
 
     if (world.rank() == 0)
     {
-        std::cout<<"resultline,"<<std::to_string(seed_rate)<<","<<std::to_string(world.size())<<","
-                     <<std::to_string(time_end - time_start)<<"\n";
+
+        std::cerr<<"resultline,"<<std::to_string(seed_rate)<<","<<std::to_string(world.size())<<","
+                <<std::to_string(time_end - time_start)<<"\n";
 
     }
 
