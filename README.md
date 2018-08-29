@@ -49,6 +49,7 @@ cmake /path/to/diy2-vtk7 \
 -DCMAKE_INSTALL_PREFIX=/path/to/diy2-vtk7/install \
 -DDIY_INCLUDE_DIRS=/path/to/diy/include \
 -DVTK_DIR=/path/to/vtk/build \
+-PNETCDF_DIR = /path/to/pnetcdf
 
 make install
 ```
@@ -64,5 +65,6 @@ make install
 cd path/to/diy2-vtk7/install/examples/particle_tracing
 ./TORNADO_TEST
 ./PLUME_TEST
+./NEK_TEST1
 
 ```
