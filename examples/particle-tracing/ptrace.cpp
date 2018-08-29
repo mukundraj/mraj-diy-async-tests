@@ -61,8 +61,9 @@
 
 using namespace std;
 
-#define IEXCHANGE 1
+#define IEXCHANGE 0
 
+int counter = 0, number_of_rounds = 0;
 
 static void handle_error(int status, int lineno)
 {
@@ -381,8 +382,10 @@ void TraceBlock(Block *b,
 #endif
 
 #if IEXCHANGE==1
+
+
 bool trace_segment(Block *b,
-                   const diy::Master::IProxyWithLink &icp,
+                   const diy::Master::ProxyWithLink &icp,
                    const Decomposer&            decomposer,
                    const diy::Assigner&         assigner,
                    const int                    max_steps,
@@ -390,7 +393,7 @@ bool trace_segment(Block *b,
                    const Decomposer::BoolVector share_face)
 
 {
-
+    counter++;
     const int rank              = icp.master()->communicator().rank();
     const int gid               = icp.gid();
     diy::RegularLink<Bounds> *l = static_cast<diy::RegularLink<Bounds>*>(icp.link());
@@ -682,16 +685,19 @@ int main(int argc, char **argv)
                 done = master.proxy(i).get<int>();
             }
 
-            if (world.rank() == 0)
+            if (world.rank() == 0){
                 fprintf(stderr, "round=%d, INIT=%d, DONE=%d\n", round, init, done);
-
+                number_of_rounds = round;
+            }
             if (init == done && done != 0)
                 break;
+
         }
 #endif
 
+
 #if IEXCHANGE==1
-        master.iexchange([&](Block* b, const diy::Master::IProxyWithLink& icp) -> bool
+        master.iexchange([&](Block* b, const diy::Master::ProxyWithLink& icp) -> bool
         { bool val = trace_segment(b,
                                    icp,
                                    decomposer,
@@ -709,11 +715,17 @@ int main(int argc, char **argv)
     MPI_Barrier(world);
     double time_end = MPI_Wtime();
 
+    int all_counter=0;
+    MPI_Reduce(&counter, &all_counter, 1, MPI_INT, MPI_SUM, 0, world);
+
     if (world.rank() == 0)
     {
 
+        //all_counter: number of callbacks in case of IEXCHANGE
+        //number_of_rounds: number of rounds in case of SYNCHRONOUS
         std::cerr<<"resultline,"<<std::to_string(seed_rate)<<","<<std::to_string(world.size())<<","
-                <<std::to_string(time_end - time_start)<<"\n";
+                <<std::to_string(time_end - time_start)<<", "
+               <<all_counter<<", "<<number_of_rounds<< "\n";
 
     }
 //#endif
