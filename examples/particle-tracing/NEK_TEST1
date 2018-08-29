@@ -1,0 +1,42 @@
+#!/bin/bash
+
+# number of procs
+num_procs=4
+
+# executable
+exe=./ptrace
+
+# inout file
+infile="/Users/mukundraj/Desktop/work/datasets/nek5000.nc"
+
+# max number of advection steps
+max_steps=1024
+
+# seed rate (seed particles every this many grid points in each dimension)
+sr=16
+
+# domain extents
+mins="0 0 0"
+maxs="511 511 511"
+
+# options
+# --blocks <totblocks> --threads <num_threads> --vec-scale <vector scaling factor>
+# --in-memory <num_mem_blocks> --storage <path to out of core storage> --hdr-bytes <byte ofst>
+# --max-rounds <max_rounds>
+
+opts="--blocks 4 --max-rounds 9999"
+args="$opts $infile $max_steps $sr $mins $maxs"
+mpiexec -n $num_procs $exe $args
+
+opts="--blocks 16 --max-rounds 9999"
+args="$opts $infile $max_steps $sr $mins $maxs"
+mpiexec -n $num_procs $exe $args
+
+opts="--blocks 64 --max-rounds 9999"
+args="$opts $infile $max_steps $sr $mins $maxs"
+mpiexec -n $num_procs $exe $args
+
+opts="--blocks 256 --max-rounds 9999"
+args="$opts $infile $max_steps $sr $mins $maxs"
+mpiexec -n $num_procs $exe $args
+
