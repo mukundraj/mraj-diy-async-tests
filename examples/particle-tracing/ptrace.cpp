@@ -61,9 +61,9 @@
 
 using namespace std;
 
-#define IEXCHANGE 1
+#define IEXCHANGE 0
 
-int counter = 0, number_of_rounds = 0;
+int counter = 0, number_of_rounds = -1;
 
 static void handle_error(int status, int lineno)
 {
@@ -222,6 +222,7 @@ void TraceBlock(Block *b,
                 const int                    seed_rate,
                 const Decomposer::BoolVector share_face)
 {
+    number_of_rounds++;
     const int rank              = cp.master()->communicator().rank();
     const int gid               = cp.gid();
     diy::RegularLink<Bounds> *l = static_cast<diy::RegularLink<Bounds>*>(cp.link());
@@ -245,11 +246,6 @@ void TraceBlock(Block *b,
     const int   gsz[3]  = {l->bounds().max[0] - l->bounds().min[0] + 1,
                            l->bounds().max[1] - l->bounds().min[1] + 1,
                            l->bounds().max[2] - l->bounds().min[2] + 1};
-
-    // debug
-    // fprintf(stderr, "bounds min[%d %d %d] max[%d %d %d]\n",
-    //         l->bounds().min[0], l->bounds().min[1], l->bounds().min[2],
-    //         l->bounds().max[0], l->bounds().max[1], l->bounds().max[2]);
 
     // initialize seed particles first time
     bool first_time = false;
@@ -309,7 +305,15 @@ void TraceBlock(Block *b,
         }
     }
 
+    // debug
+    if (particles.size())
+        fprintf(stderr, "round %d gid %d dequeued %lu particles\n", number_of_rounds, cp.gid(), particles.size());
+
     // trace particles
+
+    // debug
+    int nenq_particles = 0;
+
     for (int i = 0; i < particles.size(); i++)
     {
         Pt&     cur_p = particles[i].pt; // current end point
@@ -361,6 +365,7 @@ void TraceBlock(Block *b,
                 outgoing_endpts[bid].push_back(out_pt);
                 // fprintf(stderr, "gid %d enqueue [%.3f %.3f %.3f] to gid %d\n",
                 //         gid, out_pt[0], out_pt[1], out_pt[2], bid.gid);
+                nenq_particles++;
             }
         }
     }
@@ -370,13 +375,13 @@ void TraceBlock(Block *b,
          outgoing_endpts.begin(); it != outgoing_endpts.end(); it++)
         cp.enqueue(it->first, it->second);
 
-
-
     // stage all_reduce of total initialized and total finished particle traces
     cp.all_reduce(b->init, plus<int>());
     cp.all_reduce(b->done, plus<int>());
 
-
+    // debug
+    if (nenq_particles)
+        fprintf(stderr, "round %d gid %d enqueued %d particles\n", number_of_rounds, cp.gid(), nenq_particles);
 }
 
 #endif
@@ -417,11 +422,6 @@ bool trace_segment(Block *b,
     const int   gsz[3]  = {l->bounds().max[0] - l->bounds().min[0] + 1,
                            l->bounds().max[1] - l->bounds().min[1] + 1,
                            l->bounds().max[2] - l->bounds().min[2] + 1};
-
-    // debug
-    // fprintf(stderr, "bounds min[%d %d %d] max[%d %d %d]\n",
-    //         l->bounds().min[0], l->bounds().min[1], l->bounds().min[2],
-    //         l->bounds().max[0], l->bounds().max[1], l->bounds().max[2]);
 
     // initialize seed particles first time
     bool first_time = false;
@@ -464,8 +464,6 @@ bool trace_segment(Block *b,
         }
     }
 
-    //    diy::Link* l = cp.link();
-
     for (size_t i = 0; i < l->size(); ++i)
     {
         int nbr_gid = l->target(i).gid;
@@ -475,13 +473,17 @@ bool trace_segment(Block *b,
             icp.dequeue(nbr_gid, incoming_endpt);
             particles.push_back(incoming_endpt);
         }
-
-
     }
 
-
+    // debug
+    if (particles.size())
+        fprintf(stderr, "counter %d gid %d dequeued %lu particles\n", counter, icp.gid(), particles.size());
 
     // trace particles
+
+    // debug
+    int nenq_particles = 0;
+
     for (int i = 0; i < particles.size(); i++)
     {
         Pt&     cur_p = particles[i].pt; // current end point
@@ -505,12 +507,10 @@ bool trace_segment(Block *b,
         if (!inside(next_p, decomposer.domain))
             finished = true;
 
-
-        if (finished){                    // this segment is done
+        if (finished)                    // this segment is done
             b->done++;
-        }
-        else{                               // asyncronously send out segment
-
+        else                               // asyncronously send out segment
+        {
             vector<int> dests;
             vector<int>::iterator it = dests.begin();
             insert_iterator<vector<int> > insert_it(dests, it);
@@ -521,14 +521,20 @@ bool trace_segment(Block *b,
             {
                 diy::BlockID bid = l->target(dests[j]);
                 icp.enqueue(bid, out_pt);
+
                 //                outgoing_endpts[bid].push_back(out_pt);
                 // fprintf(stderr, "gid %d enqueue [%.3f %.3f %.3f] to gid %d\n",
                 //         gid, out_pt[0], out_pt[1], out_pt[2], bid.gid);
+
+                // debug
+                nenq_particles++;
             }
-
         }
-
     }
+
+    // debug
+    if (nenq_particles)
+        fprintf(stderr, "counter %d gid %d enqueued %d particles\n", counter, icp.gid(), nenq_particles);
 
     return true;
 }

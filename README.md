@@ -20,7 +20,7 @@ a. DIY
 git clone https://github.com/diatomic/diy
 ```
 
-b. VTK
+b. VTK (optional, for visualizing streamlines only)
 
 ```
 wget http://www.vtk.org/files/release/7.1/VTK-7.1.0.tar.gz
@@ -43,13 +43,13 @@ make install
 ## Build examples
 
 ```
-cmake /path/to/diy2-vtk7 \
+cmake /path/to/mraj-diy-async-tests \
 -DCMAKE_CXX_COMPILER=/path/to/mpicxx \
 -DCMAKE_C_COMPILER=/path/to/mpicc \
--DCMAKE_INSTALL_PREFIX=/path/to/diy2-vtk7/install \
+-DCMAKE_INSTALL_PREFIX=/path/to/mraj-diy-async-tests/install \
 -DDIY_INCLUDE_DIRS=/path/to/diy/include \
--DVTK_DIR=/path/to/vtk/build \
--PNETCDF_DIR = /path/to/pnetcdf
+-DVTK_DIR=/path/to/vtk/build \    # optional
+-DPNETCDF_DIR=/path/to/pnetcdf
 
 make install
 ```
@@ -62,7 +62,7 @@ make install
 
 ## Particle tracing example
 ```
-cd path/to/diy2-vtk7/install/examples/particle_tracing
+cd path/to/mraj-diy-async-tests/install/examples/particle_tracing
 ./TORNADO_TEST
 ./PLUME_TEST
 ./NEK_TEST1
