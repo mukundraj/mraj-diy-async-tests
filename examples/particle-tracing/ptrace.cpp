@@ -61,7 +61,9 @@
 
 using namespace std;
 
+#if !defined(IEXCHANGE)
 #define IEXCHANGE 0
+#endif
 
 int counter = 0, number_of_rounds = -1;
 
