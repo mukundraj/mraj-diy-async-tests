@@ -1,9 +1,10 @@
 project                     (diy2-vtk7)
 cmake_minimum_required      (VERSION 2.8)
 
-option                      (diy_thread     "Enable diy threading"             OFF)
-option (WITH_VTK OFF)
-option (WITH_TIMEINFO ON)
+option                      (diy_thread     "Enable diy threading"              OFF)
+option                      (WITH_VTK                                           OFF)
+option                      (WITH_TIMEINFO                                      ON)
+option                      (WITH_MPE       "Enable MPE logging"                OFF)
 
 # Default to Release
 if                          (NOT CMAKE_BUILD_TYPE)
@@ -64,6 +65,18 @@ set (PNETCDF_INCLUDE_DIR ${PNETCDF_DIR}/include)
 set (PNETCDF_LIBRARY ${PNETCDF_DIR}/lib/libpnetcdf.a)
 include_directories (${PNETCDF_INCLUDE_DIR})
 
+# MPE
+if (WITH_MPE)
+    set                     (MPE_LIB ${MPE_DIR}/lib/libmpe.a)
+    set                     (LMPE_LIB ${MPE_DIR}/lib/liblmpe.a)
+    set                     (libraries
+                            ${MPE_LIB}
+                            ${LMPE_LIB}
+                            ${libraries})
+    message                 ("MPE logging is enabled.")
+    add_definitions         (-DMPE)
+    include_directories     (${MPE_DIR}/include)
+endif()
 
 # find_package (NetCDF REQUIRED)
 # include_directories (${NETCDF_INCLUDE_DIR})

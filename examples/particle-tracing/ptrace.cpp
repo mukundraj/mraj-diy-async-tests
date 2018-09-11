@@ -57,7 +57,11 @@
 #include <fstream>
 #include <string.h>
 
+#ifdef MPE
 
+#include    "mpe.h"
+
+#endif
 
 using namespace std;
 
@@ -215,7 +219,8 @@ struct AddAndRead : public AddBlock
     int hdr_bytes;
 };
 
-#if IEXCHANGE==0
+#if IEXCHANGE==0                        // callback for synchronous exchange version
+
 void TraceBlock(Block *b,
                 const diy::Master::ProxyWithLink &cp,
                 const Decomposer&            decomposer,
@@ -313,6 +318,15 @@ void TraceBlock(Block *b,
 
     // trace particles
 
+#ifdef MPE
+
+    int eventID_begin, eventID_end;
+    MPE_Log_get_state_eventIDs(&eventID_begin, &eventID_end);
+    MPE_Describe_state(eventID_begin, eventID_end, "Advection", "red");
+    MPE_Log_event(eventID_begin, 0, NULL);
+
+#endif
+
     // debug
     int nenq_particles = 0;
 
@@ -377,6 +391,12 @@ void TraceBlock(Block *b,
          outgoing_endpts.begin(); it != outgoing_endpts.end(); it++)
         cp.enqueue(it->first, it->second);
 
+#ifdef MPE
+
+    MPE_Log_event(eventID_end, 0, NULL);
+
+#endif
+
     // stage all_reduce of total initialized and total finished particle traces
     cp.all_reduce(b->init, plus<int>());
     cp.all_reduce(b->done, plus<int>());
@@ -388,8 +408,7 @@ void TraceBlock(Block *b,
 
 #endif
 
-#if IEXCHANGE==1
-
+#if IEXCHANGE==1                                // callback for asynchronous iexchange version
 
 bool trace_segment(Block *b,
                    const diy::Master::ProxyWithLink &icp,
@@ -483,6 +502,18 @@ bool trace_segment(Block *b,
 
     // trace particles
 
+#ifdef MPE
+
+    int eventID_begin, eventID_end;
+    if (particles.size())
+    {
+        MPE_Log_get_state_eventIDs(&eventID_begin, &eventID_end);
+        MPE_Describe_state(eventID_begin, eventID_end, "Advection", "red");
+        MPE_Log_event(eventID_begin, 0, NULL);
+    }
+
+#endif
+
     // debug
     int nenq_particles = 0;
 
@@ -533,6 +564,13 @@ bool trace_segment(Block *b,
             }
         }
     }
+
+#ifdef MPE
+
+    if (particles.size())
+        MPE_Log_event(eventID_end, 0, NULL);
+
+#endif
 
     // debug
     if (nenq_particles)
@@ -604,10 +642,6 @@ int main(int argc, char **argv)
     float vec_scale = 1.0;                    // vector field scaling factor
     int hdr_bytes   = 0;                      // num bytes header before start of data in infile
     int max_rounds  = 0;                      // max number of rounds to trace (0 = no limit)
-
-//    // print vtk version
-//    if (world.rank() == 0)
-//        std::cerr << vtkVersion::GetVTKSourceVersion() << std::endl;
 
     Options ops(argc, argv);
     ops
