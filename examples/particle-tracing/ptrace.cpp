@@ -20,6 +20,7 @@
 #include <diy/pick.hpp>
 #include <diy/reduce.hpp>
 #include <diy/partners/merge.hpp>
+#include <diy/io/shared.hpp>
 
 #ifdef WITH_VTK
 
@@ -785,6 +786,12 @@ int main(int argc, char **argv)
     }
 #endif
 
+#if IEXCHANGE==1
+    diy::io::SharedOutFile prof_out(fmt::format("profile-iexchange-p{}-b{}.txt", world.size(), nblocks), world);
+#else
+    diy::io::SharedOutFile prof_out(fmt::format("profile-exchange-p{}-b{}.txt", world.size(), nblocks), world);
+#endif
+    master.prof.output(prof_out, std::to_string(world.rank()));
 
     return 0;
 }
