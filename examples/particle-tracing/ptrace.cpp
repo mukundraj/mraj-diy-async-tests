@@ -57,6 +57,7 @@
 
 #include <fstream>
 #include <string.h>
+#include <thread>
 
 #ifdef MPE
 
@@ -220,7 +221,7 @@ struct AddAndRead : public AddBlock
     int hdr_bytes;
 };
 
-#if IEXCHANGE==0                        // callback for synchronous exchange version
+#if IEXCHANGE == 0                        // callback for synchronous exchange version
 
 void TraceBlock(Block *b,
                 const diy::Master::ProxyWithLink &cp,
@@ -314,8 +315,8 @@ void TraceBlock(Block *b,
     }
 
     // debug
-    if (particles.size())
-        fprintf(stderr, "round %d gid %d dequeued %lu particles\n", number_of_rounds, cp.gid(), particles.size());
+//     if (particles.size())
+//         fprintf(stderr, "round %d gid %d dequeued %lu particles\n", number_of_rounds, cp.gid(), particles.size());
 
     // trace particles
 
@@ -403,13 +404,13 @@ void TraceBlock(Block *b,
     cp.all_reduce(b->done, plus<int>());
 
     // debug
-    if (nenq_particles)
-        fprintf(stderr, "round %d gid %d enqueued %d particles\n", number_of_rounds, cp.gid(), nenq_particles);
+//     if (nenq_particles)
+//         fprintf(stderr, "round %d gid %d enqueued %d particles\n", number_of_rounds, cp.gid(), nenq_particles);
 }
 
 #endif
 
-#if IEXCHANGE==1                                // callback for asynchronous iexchange version
+#if IEXCHANGE == 1                                // callback for asynchronous iexchange version
 
 bool trace_segment(Block *b,
                    const diy::Master::ProxyWithLink &icp,
@@ -498,8 +499,8 @@ bool trace_segment(Block *b,
     }
 
     // debug
-    if (particles.size())
-        fprintf(stderr, "counter %d gid %d dequeued %lu particles\n", counter, icp.gid(), particles.size());
+//     if (particles.size())
+//         fprintf(stderr, "counter %d gid %d dequeued %lu particles\n", counter, icp.gid(), particles.size());
 
     // trace particles
 
@@ -574,8 +575,8 @@ bool trace_segment(Block *b,
 #endif
 
     // debug
-    if (nenq_particles)
-        fprintf(stderr, "counter %d gid %d enqueued %d particles\n", counter, icp.gid(), nenq_particles);
+//     if (nenq_particles)
+//         fprintf(stderr, "counter %d gid %d enqueued %d particles\n", counter, icp.gid(), nenq_particles);
 
     return true;
 }
@@ -635,25 +636,29 @@ int main(int argc, char **argv)
     using namespace opts;
 
     // defaults
-    int nblocks     = world.size();           // total number of global blocks
-    int nthreads    = 1;                      // number of threads diy can use
-    int mblocks     = -1;                     // number of blocks in memory (-1 = all)
-    string prefix   = "./DIY.XXXXXX";         // storage of temp files
-    int ndims       = 3;                      // domain dimensions
-    float vec_scale = 1.0;                    // vector field scaling factor
-    int hdr_bytes   = 0;                      // num bytes header before start of data in infile
-    int max_rounds  = 0;                      // max number of rounds to trace (0 = no limit)
+    int nblocks             = world.size();     // total number of global blocks
+    int nthreads            = 1;                // number of threads diy can use
+    int mblocks             = -1;               // number of blocks in memory (-1 = all)
+    string prefix           = "./DIY.XXXXXX";   // storage of temp files
+    int ndims               = 3;                // domain dimensions
+    float vec_scale         = 1.0;              // vector field scaling factor
+    int hdr_bytes           = 0;                // num bytes header before start of data in infile
+    int max_rounds          = 0;                // max number of rounds to trace (0 = no limit)
+    size_t min_queue_size   = 0;                // min queue size (bytes) for iexchange
+    size_t max_hold_time    = 0;                // max hold time (microsec) for iexchange
 
     Options ops(argc, argv);
     ops
-            >> Option('b', "blocks",     nblocks,    "Total number of blocks to use")
-            >> Option('t', "threads",    nthreads,   "Number of threads to use")
-            >> Option('m', "in-memory",  mblocks,    "Number of blocks to keep in memory")
-            >> Option('s', "storage",    prefix,     "Path for out-of-core storage")
-            >> Option('v', "vec-scale",  vec_scale,  "Vector field scaling factor")
-            >> Option('h', "hdr-bytes",  hdr_bytes,  "Skip this number bytes header in infile")
-            >> Option('r', "max-rounds", max_rounds, "Max number of rounds to trace")
-               ;
+        >> Option('b', "blocks",        nblocks,        "Total number of blocks to use")
+        >> Option('t', "threads",       nthreads,       "Number of threads to use")
+        >> Option('m', "in-memory",     mblocks,        "Number of blocks to keep in memory")
+        >> Option('s', "storage",       prefix,         "Path for out-of-core storage")
+        >> Option('v', "vec-scale",     vec_scale,      "Vector field scaling factor")
+        >> Option('h', "hdr-bytes",     hdr_bytes,      "Skip this number bytes header in infile")
+        >> Option('r', "max-rounds",    max_rounds,     "Max number of rounds to trace")
+        >> Option('q', "min-q-size",    min_queue_size, "Minimum queue size (bytes) for iexchange")
+        >> Option('o', "max-hold-time", max_hold_time,  "Minimum queue size (bytes) for iexchange")
+        ;
 
     if (ops >> Present('h', "help", "show help") ||
             !(ops >> PosOption(infile) >> PosOption(max_steps) >> PosOption(seed_rate)
@@ -698,12 +703,10 @@ int main(int argc, char **argv)
         fprintf(stderr, "starting particle tracing\n");
     }
 
-//#ifdef WITH_TIMEINFO
     MPI_Barrier(world);
     double time_start = MPI_Wtime();
-//#endif
 
-#if IEXCHANGE==0
+#if IEXCHANGE == 0
         // particle tracing for either a maximum number of rounds or, if max_rounds == 0,
         // then for inifinitely many rounds until breaking out when done is true
         int stop = (max_rounds ? max_rounds : 1);
@@ -728,8 +731,9 @@ int main(int argc, char **argv)
                 done = master.proxy(i).get<int>();
             }
 
-            if (world.rank() == 0){
-                fprintf(stderr, "round=%d, INIT=%d, DONE=%d\n", round, init, done);
+            // debug
+            {
+//                 fprintf(stderr, "round=%d, INIT=%d, DONE=%d\n", round, init, done);
                 number_of_rounds = round;
             }
             if (init == done && done != 0)
@@ -739,7 +743,7 @@ int main(int argc, char **argv)
 #endif
 
 
-#if IEXCHANGE==1
+#if IEXCHANGE == 1
         master.iexchange([&](Block* b, const diy::Master::ProxyWithLink& icp) -> bool
         { bool val = trace_segment(b,
                                    icp,
@@ -749,29 +753,15 @@ int main(int argc, char **argv)
                                    seed_rate,
                                    share_face);
             return val;
-        });
+        }, min_queue_size, max_hold_time);
 
 #endif
 
-
-//#ifdef WITH_TIMEINFO
     MPI_Barrier(world);
     double time_end = MPI_Wtime();
 
     int all_counter=0;
     MPI_Reduce(&counter, &all_counter, 1, MPI_INT, MPI_SUM, 0, world);
-
-    if (world.rank() == 0)
-    {
-
-        //all_counter: number of callbacks in case of IEXCHANGE
-        //number_of_rounds: number of rounds in case of SYNCHRONOUS
-        std::cerr<<"resultline,"<<std::to_string(seed_rate)<<","<<std::to_string(world.size())<<","
-                <<std::to_string(time_end - time_start)<<", "
-               <<all_counter<<", "<<number_of_rounds<< "\n";
-
-    }
-//#endif
 
     // merge-reduce traces to one block
     int k = 2;                               // the radix of the k-ary reduction tree
@@ -786,12 +776,65 @@ int main(int argc, char **argv)
     }
 #endif
 
-#if IEXCHANGE==1
+    // output profile
+#if IEXCHANGE == 1
     diy::io::SharedOutFile prof_out(fmt::format("profile-iexchange-p{}-b{}.txt", world.size(), nblocks), world);
 #else
     diy::io::SharedOutFile prof_out(fmt::format("profile-exchange-p{}-b{}.txt", world.size(), nblocks), world);
 #endif
     master.prof.output(prof_out, std::to_string(world.rank()));
+    prof_out.close();
+
+    // print stats
+    if (world.rank() == 0)
+    {
+
+        // all_counter: number of callbacks in case of IEXCHANGE
+        // number_of_rounds: number of rounds in case of SYNCHRONOUS
+        fmt::print(stderr, "---------- stats ----------\n");
+#if IEXCHANGE == 1
+        fmt::print(stderr, "using iexchange\n");
+        fmt::print(stderr, "min queue size (bytes):\t{}\n",     min_queue_size);
+        fmt::print(stderr, "max hold time (micro s):\t{}\n",    max_hold_time);
+#else
+        fmt::print(stderr, "using exchange\n");
+#endif
+        fmt::print(stderr, "seed rate:\t\t\t{}\n",              seed_rate);
+        fmt::print(stderr, "nprocs:\t\t\t{}\n",                 world.size());
+        fmt::print(stderr, "nblocks:\t\t\t{}\n",                nblocks);
+        fmt::print(stderr, "time (s):\t\t\t{}\n",               time_end - time_start);
+#if IEXCHANGE == 1
+        fmt::print(stderr, "# callbacks:\t\t{}\n",              all_counter);
+#else
+        fmt::print(stderr, "# rounds:\t\t\t{}\n",               number_of_rounds);
+#endif
+
+        char infile[256];           // profile file name
+#if IEXCHANGE == 1
+        sprintf(infile, "profile-iexchange-p%d-b%d.txt",        world.size(), nblocks);
+#else
+        sprintf(infile, "profile-exchange-p%d-b%d.txt",         world.size(), nblocks);
+#endif
+
+        // count number of occurences of send-same-rank plus send-different rank in profile
+        char cmd[256];
+        sprintf(cmd, "grep -c '>send-.*-rank' %s", infile);
+        char buf[256];
+        size_t ncalls;
+        FILE* pipe(popen(cmd, "r"));
+        if (!pipe)
+        {
+            fprintf(stderr, "Error: popen failed\n");
+            abort();
+        }
+        while (!feof(pipe))
+            if (fgets(buf, 128, pipe) != NULL)
+                ncalls = atol(buf);
+        pclose(pipe);
+        fmt::print(stderr, "# send calls:\t\t{}\n",             ncalls);
+
+        fmt::print(stderr, "---------------------------\n");
+    }
 
     return 0;
 }

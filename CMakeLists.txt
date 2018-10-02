@@ -24,8 +24,8 @@ add_definitions             (-DDIY_PROFILE)
 
 # OSX flags
 if                          (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-    add_definitions	    (-DMAC_OSX)
-    set			    (CMAKE_MACOSX_RPATH	    on)
+    add_definitions	        (-DMAC_OSX)
+    set                     (CMAKE_MACOSX_RPATH	    on)
 endif                       (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 
  # MPI
@@ -35,7 +35,7 @@ if                          (NOT bgq)
 endif                       (NOT bgq)
 
 # Threads
-find_package		    (Threads)
+find_package                (Threads)
 if                          (NOT diy_thread)
     message                 ("Diy threading is disabled; setting diy threads will have no effect")
     add_definitions         (-DDIY_NO_THREADS)
@@ -62,10 +62,10 @@ set                         (libraries
                              ${CMAKE_THREAD_LIBS_INIT}
                              ${VTK_LIBRARIES})
 # Find PnetCDF
-find_path(PNETCDF_DIR lib/libpnetcdf.a)
-set (PNETCDF_INCLUDE_DIR ${PNETCDF_DIR}/include)
-set (PNETCDF_LIBRARY ${PNETCDF_DIR}/lib/libpnetcdf.a)
-include_directories (${PNETCDF_INCLUDE_DIR})
+find_path                   (PNETCDF_DIR lib/libpnetcdf.a)
+set                         (PNETCDF_INCLUDE_DIR ${PNETCDF_DIR}/include)
+set                         (PNETCDF_LIBRARY ${PNETCDF_DIR}/lib/libpnetcdf.a)
+include_directories         (${PNETCDF_INCLUDE_DIR})
 
 # MPE
 if (WITH_MPE)
