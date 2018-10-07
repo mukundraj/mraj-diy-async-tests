@@ -48,8 +48,9 @@ cmake /path/to/mraj-diy-async-tests \
 -DCMAKE_C_COMPILER=/path/to/mpicc \
 -DCMAKE_INSTALL_PREFIX=/path/to/mraj-diy-async-tests/install \
 -DDIY_INCLUDE_DIRS=/path/to/diy/include \
--DVTK_DIR=/path/to/vtk/build \    # optional
--DPNETCDF_DIR=/path/to/pnetcdf
+-DPNETCDF_DIR=/path/to/pnetcdf \
+-DWITH_VTK=true \                   # optional
+-DVTK_DIR=/path/to/vtk/build \      # optional, needed if -DWITH_VTK=true
 
 make install
 ```

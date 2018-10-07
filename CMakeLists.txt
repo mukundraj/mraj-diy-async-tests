@@ -5,6 +5,7 @@ option                      (diy_thread     "Enable diy threading"              
 option                      (WITH_VTK                                           OFF)
 option                      (WITH_TIMEINFO                                      ON)
 option                      (WITH_MPE       "Enable MPE logging"                OFF)
+option                      (wrapped_mpi    "MPI compiler wrapper requires no further MPI libs"     OFF)
 
 # Default to Release
 if                          (NOT CMAKE_BUILD_TYPE)
@@ -24,15 +25,34 @@ add_definitions             (-DDIY_PROFILE)
 
 # OSX flags
 if                          (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-    add_definitions	        (-DMAC_OSX)
-    set                     (CMAKE_MACOSX_RPATH	    on)
-endif                       (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+  add_definitions           (-DMAC_OSX)
+  set                       (CMAKE_MACOSX_RPATH on)
 
- # MPI
-find_package                (MPI REQUIRED)
-if                          (NOT bgq)
-    set                     (libraries ${libraries} ${MPI_C_LIBRARIES} ${MPI_CXX_LIBRARIES})
-endif                       (NOT bgq)
+    # --- following RPATH settings are for Sierra w/ Clang, hopefully they don't hurt other versions
+    # ref: https://cmake.org/Wiki/CMake_RPATH_handling
+    # use, i.e. don't skip, the full RPATH for the build tree
+    set                     (CMAKE_SKIP_BUILD_RPATH            false)
+    # when building, don't use the install RPATH already (but later on when installing)
+    set                     (CMAKE_BUILD_WITH_INSTALL_RPATH    false)
+    # set RPATH to install path
+    set                     (CMAKE_INSTALL_RPATH               "${CMAKE_INSTALL_PREFIX}/lib")
+    # add the automatically determined parts of the RPATH
+    # which point to directories outside the build tree to the install RPATH
+    set                     (CMAKE_INSTALL_RPATH_USE_LINK_PATH true)
+    # the RPATH to be used when installing, but only if it's not a system directory
+    list                    (FIND CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES
+                                                               "${CMAKE_INSTALL_PREFIX}/lib"
+                                                               isSystemDir)
+    if                      ("${isSystemDir}" STREQUAL         "-1")
+      set                   (CMAKE_INSTALL_RPATH               "${CMAKE_INSTALL_PREFIX}/lib")
+    endif                   ()
+endif                       (${CMAKE_SYSTEM_NAME} MATCHES      "Darwin")
+
+# MPI
+ if                         (NOT wrapped_mpi)
+     find_package           (MPI REQUIRED)
+     set                    (libraries ${libraries} ${MPI_C_LIBRARIES} ${MPI_CXX_LIBRARIES})
+ endif                      ()
 
 # Threads
 find_package                (Threads)
@@ -61,6 +81,8 @@ set                         (libraries
                              ${libraries}
                              ${CMAKE_THREAD_LIBS_INIT}
                              ${VTK_LIBRARIES})
+
+
 # Find PnetCDF
 find_path                   (PNETCDF_DIR lib/libpnetcdf.a)
 set                         (PNETCDF_INCLUDE_DIR ${PNETCDF_DIR}/include)
