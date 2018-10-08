@@ -836,5 +836,12 @@ int main(int argc, char **argv)
         fmt::print(stderr, "---------------------------\n");
     }
 
+    std::string filename;
+    if(IEXCHANGE==0)
+        filename = "exchange.txt";
+    else
+        filename = "iexchange.txt";
+    ((Block*)master.block(0))->write_segments(filename);
+
     return 0;
 }
