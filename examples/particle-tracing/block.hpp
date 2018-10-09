@@ -451,10 +451,6 @@ struct AddSynthetic1 : public AddBlock
             }
         }
 
-        // debug
-//         fmt::print(stderr, "gid={} min=[{} {} {}] max=[{} {} {}] divs=[{} {} {}] coords=[{} {} {}] diagonal={}\n",
-//                 gid, core.min[0], core.min[1], core.min[2], core.max[0], core.max[1], core.max[2], divs[0], divs[1], divs[2], coords[0], coords[1], coords[2], diagonal);
-
         for (size_t i = 0; i < b->nvecs; i++)
         {
             if (diagonal)                           // slow block
@@ -505,23 +501,19 @@ struct AddSynthetic2 : public AddBlock
         std::vector<int> coords;                            // coordinates of block in each dimension
         decomposer.gid_to_coords(gid, coords);
 
-        // debug
-//         fmt::print(stderr, "gid={} min=[{} {} {}] max=[{} {} {}] divs=[{} {} {}] coords=[{} {} {}] diagonal={}\n",
-//                 gid, core.min[0], core.min[1], core.min[2], core.max[0], core.max[1], core.max[2], divs[0], divs[1], divs[2], coords[0], coords[1], coords[2], diagonal);
-
         for (size_t i = 0; i < b->nvecs; i++)
         {
+            // we want to create a gradient in the x-velocity based on the y-z coordinates of the vector
+            // velocity is constant across the x direction
+            size_t nx = bounds.max[0] - bounds.min[0] + 1;          // number of vectors in x direction
+            size_t j = i / nx;                                      // index of vector in y-z plane, ignoring x coordinate
             if (coords[0] % 2 == 0)
-                b->vel[0][i] = slow_vel + (fast_vel - slow_vel) * (float)i / b->nvecs;
+                b->vel[0][i] = slow_vel + (fast_vel - slow_vel) * (float)j / b->nvecs * nx;
             else
-                b->vel[0][i] = fast_vel - (fast_vel - slow_vel) * (float)i / b->nvecs;
+                b->vel[0][i] = fast_vel - (fast_vel - slow_vel) * (float)j / b->nvecs * nx;
             b->vel[1][i] = 0.0;
             b->vel[2][i] = 0.0;
         }
-
-        // debug
-//         fmt::print(stderr, "coords=[{} {} {}] start_vel={} end_vel={}\n",
-//                 coords[0], coords[1], coords[2], b->vel[0][0], b->vel[0][b->nvecs - 1]);
     }
 
     Decomposer  decomposer;
