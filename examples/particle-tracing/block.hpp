@@ -153,27 +153,6 @@ struct Block
     // copied from http://www.vtk.org/Wiki/VTK/Examples/Cxx/GeometricObjects/PolyLine
     void render()
     {
-
-        /*
-        // Writing out flow trajectory coordinates to compare sync and iex version outputs.
-        ofstream myfile;
-        myfile.open ("iex.txt");
-
-        //                printf("%ld", segments.size());
-        for (size_t i = 0; i < segments.size(); i++){
-            for (size_t j = 0; j < segments[i].pts.size(); j++){
-                //                        fprintf(myfile, "%ld %f %f %f, ", segments[i].pts.size(),
-                //                               segments[i].pts[0].coords[0],
-                //                               segments[i].pts[0].coords[1],
-                //                               segments[i].pts[0].coords[2]);
-                myfile<<segments[i].pts[j].coords[0]<<" "<<segments[i].pts[j].coords[1]
-                                                   <<" "<<segments[i].pts[j].coords[2]<<" ";
-            }
-            myfile<<"\n";
-        }
-        myfile.close();
-        */
-
         // vtk points
         vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
 

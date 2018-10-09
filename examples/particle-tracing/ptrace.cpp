@@ -494,6 +494,7 @@ int main(int argc, char **argv)
     int synth               = 0;                // generate various synthetic input datasets
     float slow_vel          = 1.0;              // slow velocity for synthetic data
     float fast_vel          = 10.0;             // fast velocity for synthetic data
+    bool check              = false;            // write out traces for checking
 
     Options ops(argc, argv);
     ops
@@ -509,6 +510,7 @@ int main(int argc, char **argv)
         >> Option('x', "synthetic",     synth,          "Generate various synthetic flows")
         >> Option('w', "slow-vel",      slow_vel,       "Slow velocity for synthetic data")
         >> Option('f', "fast-vel",      fast_vel,       "Fast velocity for synthetic data")
+        >> Option('c', "check",         check,          "Write out traces for checking")
         ;
 
     if (ops >> Present('h', "help", "show help") ||
@@ -718,12 +720,16 @@ int main(int argc, char **argv)
         fmt::print(stderr, "---------------------------\n");
     }
 
-    std::string filename;
-    if(IEXCHANGE==0)
-        filename = "exchange.txt";
-    else
-        filename = "iexchange.txt";
-    ((Block*)master.block(0))->write_segments(filename);
+    // write trajectory segments out in order to validate that they are identical
+    if (check)
+    {
+        std::string filename;
+        if(IEXCHANGE==0)
+            filename = "exchange.txt";
+        else
+            filename = "iexchange.txt";
+        ((Block*)master.block(0))->write_segments(filename);
+    }
 
     return 0;
 }
