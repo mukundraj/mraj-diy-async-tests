@@ -512,6 +512,7 @@ int main(int argc, char **argv)
         >> Option('f', "fast-vel",      fast_vel,       "Fast velocity for synthetic data")
         >> Option('c', "check",         check,          "Write out traces for checking")
         ;
+    bool fine = ops >> Present("fine", "Use fine-grain icommunicate");
 
     if (ops >> Present('h', "help", "show help") ||
             !(ops >> PosOption(infile) >> PosOption(max_steps) >> PosOption(seed_rate)
@@ -630,7 +631,7 @@ int main(int argc, char **argv)
                                      share_face,
                                      synth);
             return val;
-        }, min_queue_size, max_hold_time);
+        }, min_queue_size, max_hold_time, fine);
 
 #endif
 
