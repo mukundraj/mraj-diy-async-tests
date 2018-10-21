@@ -489,8 +489,8 @@ int main(int argc, char **argv)
     float vec_scale         = 1.0;              // vector field scaling factor
     int hdr_bytes           = 0;                // num bytes header before start of data in infile
     int max_rounds          = 0;                // max number of rounds to trace (0 = no limit)
-    size_t min_queue_size   = 0;                // min queue size (bytes) for iexchange
-    size_t max_hold_time    = 0;                // max hold time (microsec) for iexchange
+    int min_queue_size      = 0;                // min queue size (bytes) for iexchange
+    int max_hold_time       = 0;                // max hold time (microsec) for iexchange
     int synth               = 0;                // generate various synthetic input datasets
     float slow_vel          = 1.0;              // slow velocity for synthetic data
     float fast_vel          = 10.0;             // fast velocity for synthetic data
@@ -662,7 +662,7 @@ int main(int argc, char **argv)
 
     // output profile
 #if IEXCHANGE == 1
-    diy::io::SharedOutFile prof_out(fmt::format("profile-iexchange-p{}-b{}.txt", world.size(), nblocks), world);
+    diy::io::SharedOutFile prof_out(fmt::format("profile-iexchange-p{}-b{}-q{}-h{}.txt", world.size(), nblocks, min_queue_size, max_hold_time), world);
 #else
     diy::io::SharedOutFile prof_out(fmt::format("profile-exchange-p{}-b{}.txt", world.size(), nblocks), world);
 #endif
@@ -672,7 +672,6 @@ int main(int argc, char **argv)
     // print stats
     if (world.rank() == 0)
     {
-
         // all_counter: number of callbacks in case of IEXCHANGE
         // number_of_rounds: number of rounds in case of SYNCHRONOUS
         fmt::print(stderr, "---------- stats ----------\n");
@@ -699,25 +698,6 @@ int main(int argc, char **argv)
 #else
         sprintf(infile, "profile-exchange-p%d-b%d.txt",         world.size(), nblocks);
 #endif
-
-        // count number of occurences of send-same-rank plus send-different rank in profile
-        char cmd[256];
-        sprintf(cmd, "grep -c '>send-.*-rank' %s", infile);
-        char buf[256];
-        size_t ncalls;
-        FILE* pipe(popen(cmd, "r"));
-        if (!pipe)
-        {
-            fprintf(stderr, "Error: popen failed\n");
-            abort();
-        }
-        while (!feof(pipe))
-            if (fgets(buf, 128, pipe) != NULL)
-                ncalls = atol(buf);
-        pclose(pipe);
-        fmt::print(stderr, "# send calls:\t\t{}\n",             ncalls);
-
-        fmt::print(stderr, "---------------------------\n");
     }
 
     // write trajectory segments out in order to validate that they are identical
