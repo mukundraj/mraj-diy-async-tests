@@ -18,6 +18,7 @@
 #include <diy/pick.hpp>
 #include <diy/reduce.hpp>
 #include <diy/partners/merge.hpp>
+#include <diy/point.hpp>
 
 using namespace std;
 
@@ -28,7 +29,8 @@ typedef diy::RegularDecomposer<Bounds> Decomposer;
 // one point
 struct Pt
 {
-    float coords[3];                         // (x, y, z)
+    //float coords[3];                         // (x, y, z)
+    diy::Point<float, 3>    coords;
 };
 
 // whether a point is inside given bounds
@@ -76,7 +78,7 @@ struct Segment
         {
             pid      = p.pid;
             sid      = p.sid;
-            Pt pt    = { p[0], p[1], p[2] };
+            Pt pt    { { p[0], p[1], p[2] } };
             pts.push_back(pt);
         }
 

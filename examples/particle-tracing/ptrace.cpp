@@ -215,7 +215,7 @@ void TraceBlock(Block*                              b,
         bool    finished = false;
 
         // trace this segment as far as it will go in the local vector field
-        while (trace_3D_rk1(gst, gsz, st, sz, vec, cur_p.coords, 0.5, next_p.coords))
+        while (trace_3D_rk1(gst, gsz, st, sz, vec, cur_p.coords.data(), 0.5, next_p.coords.data()))
         {
             s.pts.push_back(next_p);
             cur_p = next_p;
@@ -372,7 +372,7 @@ bool trace_segment(Block*                               b,
         bool    finished = false;
 
         // trace this segment as far as it will go in the local vector field
-        while (trace_3D_rk1(gst, gsz, st, sz, vec, cur_p.coords, 0.5, next_p.coords))
+        while (trace_3D_rk1(gst, gsz, st, sz, vec, cur_p.coords.data(), 0.5, next_p.coords.data()))
         {
             s.pts.push_back(next_p);
             cur_p = next_p;
@@ -471,7 +471,7 @@ void merge_traces(void* b_, const diy::ReduceProxy& rp, const diy::RegularMergeP
 int main(int argc, char **argv)
 {
     string infile;                           // input file name
-    Bounds domain;                           // global domain bounds
+    Bounds domain {3};                       // global domain bounds
     int max_steps;                           // max number of steps a particle is allowed to take
     int seed_rate;                           // seed particle every this many grid pts in each dim
 

@@ -301,7 +301,7 @@ struct AddAndRead : public AddBlock
             shape[2 - i] = domain.max[i] - domain.min[i] + 1;
         //        diy::io::BOV reader(in, shape, hdr_bytes);
 
-        Bounds r_bounds;
+        Bounds r_bounds { 3 };
         r_bounds.min[0] = bounds.min[2];
         r_bounds.max[0] = bounds.max[2];
         r_bounds.min[1] = bounds.min[1];
