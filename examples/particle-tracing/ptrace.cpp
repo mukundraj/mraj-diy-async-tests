@@ -495,6 +495,7 @@ int main(int argc, char **argv)
     float slow_vel          = 1.0;              // slow velocity for synthetic data
     float fast_vel          = 10.0;             // fast velocity for synthetic data
     bool check              = false;            // write out traces for checking
+    std::string log_level   = "info";
 
     Options ops(argc, argv);
     ops
@@ -511,6 +512,7 @@ int main(int argc, char **argv)
         >> Option('w', "slow-vel",      slow_vel,       "Slow velocity for synthetic data")
         >> Option('f', "fast-vel",      fast_vel,       "Fast velocity for synthetic data")
         >> Option('c', "check",         check,          "Write out traces for checking")
+        >> Option('l', "log",           log_level,      "log level")
         ;
     bool fine = ops >> Present("fine", "Use fine-grain icommunicate");
 
@@ -526,6 +528,7 @@ int main(int argc, char **argv)
         }
         return 1;
     }
+    diy::create_logger(log_level);
     diy::FileStorage             storage(prefix);
     diy::Master                  master(world,
                                         nthreads,

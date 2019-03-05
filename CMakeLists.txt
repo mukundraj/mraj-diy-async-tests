@@ -6,6 +6,8 @@ option                      (WITH_VTK                                           
 option                      (WITH_TIMEINFO                                      ON)
 option                      (WITH_MPE       "Enable MPE logging"                OFF)
 option                      (wrapped_mpi    "MPI compiler wrapper requires no further MPI libs"     OFF)
+option                      (log            "Build DIY with logging"                                OFF)
+
 
 # Default to Release
 if                          (NOT CMAKE_BUILD_TYPE)
@@ -17,6 +19,13 @@ endif                       (NOT CMAKE_BUILD_TYPE)
 if                          (bgq)
     add_definitions         (-DBGQ)
 endif                       (bgq)
+
+# Logging
+if                          (log)
+    add_definitions         (-DDIY_USE_SPDLOG)
+    find_path               (SPDLOG_INCLUDE_DIR     spdlog/spdlog.h)
+    include_directories     (${SPDLOG_INCLUDE_DIR})
+endif()
 
 # C++11
 set                         (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
