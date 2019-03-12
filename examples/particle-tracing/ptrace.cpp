@@ -580,17 +580,20 @@ int main(int argc, char **argv)
     double cur_std_ncalls           = 0.0;
     double prev_std_ncalls          = 0.0;
 
-    size_t nrounds;
+    size_t nrounds = 0;
 
     for (int trial = 0; trial < ntrials; trial++)           // number of trials
     {
         MPI_Barrier(world);
         double time_start = MPI_Wtime();
 
-        // trigger resetting of seed points
+        // reset the block particle traces, but leave the vector field intact
         master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
                 {
-                    b->init = 0;
+                    b->init     = 0;
+                    b->done     = 0;
+                    b->nvecs    = 0;
+                    b->segments.clear();
                 });
 
 #if IEXCHANGE == 1
@@ -677,7 +680,8 @@ int main(int argc, char **argv)
 
         // debug
         if (world.rank() == 0)
-            fmt::print(stderr, "trial {} time {} ncalls {}\n", trial, cur_time, cur_ncalls);
+            fmt::print(stderr, "trial {} time {} nrounds {} ncalls {}\n",
+                    trial, cur_time, nrounds, cur_ncalls);
 
         // merge-reduce traces to one block
         int k = 2;                               // the radix of the k-ary reduction tree
