@@ -188,18 +188,6 @@ void TraceBlock(Block*                              b,
 
     // trace particles
 
-#ifdef MPE
-
-    int eventID_begin, eventID_end;
-    MPE_Log_get_state_eventIDs(&eventID_begin, &eventID_end);
-    MPE_Describe_state(eventID_begin, eventID_end, "Advection", "red");
-    MPE_Log_event(eventID_begin, 0, NULL);
-
-#endif
-
-    // debug
-    int nenq_particles = 0;
-
     for (int i = 0; i < particles.size(); i++)
     {
         Pt&     cur_p = particles[i].pt; // current end point
@@ -251,7 +239,6 @@ void TraceBlock(Block*                              b,
                 outgoing_endpts[bid].push_back(out_pt);
                 // fprintf(stderr, "gid %d enqueue [%.3f %.3f %.3f] to gid %d\n",
                 //         gid, out_pt[0], out_pt[1], out_pt[2], bid.gid);
-                nenq_particles++;
             }
         }
     }
@@ -260,12 +247,6 @@ void TraceBlock(Block*                              b,
     for (map<diy::BlockID, vector<EndPt> >::const_iterator it =
          outgoing_endpts.begin(); it != outgoing_endpts.end(); it++)
         cp.enqueue(it->first, it->second);
-
-#ifdef MPE
-
-    MPE_Log_event(eventID_end, 0, NULL);
-
-#endif
 
     // stage all_reduce of total initialized and total finished particle traces
     cp.all_reduce(b->init, plus<int>());
@@ -336,21 +317,6 @@ bool trace_segment(Block*                               b,
 
     // trace particles
 
-#ifdef MPE
-
-    int eventID_begin, eventID_end;
-    if (particles.size())
-    {
-        MPE_Log_get_state_eventIDs(&eventID_begin, &eventID_end);
-        MPE_Describe_state(eventID_begin, eventID_end, "Advection", "red");
-        MPE_Log_event(eventID_begin, 0, NULL);
-    }
-
-#endif
-
-    // debug
-    int nenq_particles = 0;
-
     for (int i = 0; i < particles.size(); i++)
     {
         Pt&     cur_p = particles[i].pt; // current end point
@@ -392,23 +358,9 @@ bool trace_segment(Block*                               b,
                 //                outgoing_endpts[bid].push_back(out_pt);
                 // fprintf(stderr, "gid %d enqueue [%.3f %.3f %.3f] to gid %d\n",
                 //         gid, out_pt[0], out_pt[1], out_pt[2], bid.gid);
-
-                // debug
-                nenq_particles++;
             }
         }
     }
-
-#ifdef MPE
-
-    if (particles.size())
-        MPE_Log_event(eventID_end, 0, NULL);
-
-#endif
-
-    // debug
-//     if (nenq_particles)
-//         fprintf(stderr, "counter %d gid %d enqueued %d particles\n", counter, icp.gid(), nenq_particles);
 
     return true;
 }
@@ -483,7 +435,6 @@ int main(int argc, char **argv)
     float fast_vel          = 10.0;             // fast velocity for synthetic data
     bool check              = false;            // write out traces for checking
     std::string log_level   = "info";           // logging level
-    int write_profile       = 0;                // write profile
     int ntrials             = 1;                // number of trials
 
     Options ops(argc, argv);
@@ -502,7 +453,6 @@ int main(int argc, char **argv)
         >> Option('f', "fast-vel",      fast_vel,       "Fast velocity for synthetic data")
         >> Option('c', "check",         check,          "Write out traces for checking")
         >> Option('l', "log",           log_level,      "log level")
-        >> Option('p', "profile",       write_profile,  "write profile")
         >> Option('n', "trials",        ntrials,        "number of trials")
         ;
     bool fine = ops >> Present("fine", "Use fine-grain icommunicate");
@@ -519,7 +469,7 @@ int main(int argc, char **argv)
         }
         return 1;
     }
-    diy::create_logger(log_level);
+//     diy::create_logger(log_level);
     diy::FileStorage             storage(prefix);
     diy::Master                  master(world,
                                         nthreads,
@@ -662,7 +612,9 @@ int main(int argc, char **argv)
         if (trial == 0)
         {
             cur_mean_time   = cur_time;
+            prev_mean_time  = cur_time;
             cur_mean_ncalls = cur_ncalls;
+            prev_mean_ncalls= cur_ncalls;
             cur_std_time    = 0.0;
             cur_std_ncalls  = 0.0;
         }
@@ -680,8 +632,10 @@ int main(int argc, char **argv)
 
         // debug
         if (world.rank() == 0)
+        {
             fmt::print(stderr, "trial {} time {} nrounds {} ncalls {}\n",
                     trial, cur_time, nrounds, cur_ncalls);
+        }
 
         // merge-reduce traces to one block
         int k = 2;                               // the radix of the k-ary reduction tree
@@ -704,8 +658,7 @@ int main(int argc, char **argv)
 #endif
 
         // output profile
-        if (write_profile)
-        {
+#ifdef DIY_PROFILE
 #if IEXCHANGE == 1
             diy::io::SharedOutFile prof_out(fmt::format("profile-iexchange-p{}-b{}.txt", world.size(), nblocks), world);
 #else
@@ -713,7 +666,8 @@ int main(int argc, char **argv)
 #endif
             master.prof.output(prof_out, std::to_string(world.rank()));
             prof_out.close();
-        }
+#endif
+
     }           // number of trials
 
     // print stats
@@ -734,10 +688,10 @@ int main(int argc, char **argv)
         fmt::print(stderr, "nblocks:\t\t\t{}\n",                nblocks);
         fmt::print(stderr, "ntrials:\t\t\t{}\n",                ntrials);
         fmt::print(stderr, "mean time (s):\t\t{}\n",            cur_mean_time);
-        fmt::print(stderr, "std dev time (s):\t\t{}\n",         sqrt(cur_std_time / (ntrials - 1)));
+        fmt::print(stderr, "std dev time (s):\t\t{}\n",         ntrials > 1 ? sqrt(cur_std_time / (ntrials - 1)) : 0.0);
 #if IEXCHANGE == 1
         fprintf(stderr, "mean # callbacks:\t\t%.0lf\n",         cur_mean_ncalls);
-        fprintf(stderr, "std dev # callbacks:\t%.0lf\n",        sqrt(cur_std_ncalls / (ntrials - 1)));
+        fprintf(stderr, "std dev # callbacks:\t%.0lf\n",        ntrials > 1 ? sqrt(cur_std_ncalls / (ntrials - 1)) : 0.0);
 #else
         fmt::print(stderr, "# rounds:\t\t\t{}\n",               nrounds);
 #endif
@@ -751,8 +705,7 @@ int main(int argc, char **argv)
 
         // count number of occurences of send-same-rank plus send-different rank in profile
         // NB: only for the last trial; profile is overwritten for each trial
-        if (write_profile)
-        {
+#ifdef DIY_PROFILE
             char cmd[256];
             sprintf(cmd, "grep -c '>send-.*-rank' %s", infile);
             char buf[256];
@@ -768,7 +721,7 @@ int main(int argc, char **argv)
                     ncalls = atol(buf);
             pclose(pipe);
             fmt::print(stderr, "# send calls:\t\t{}\n",             ncalls);
-        }
+#endif
 
         fmt::print(stderr, "---------------------------\n");
     }

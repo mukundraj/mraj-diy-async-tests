@@ -7,6 +7,7 @@ option                      (WITH_TIMEINFO                                      
 option                      (WITH_MPE       "Enable MPE logging"                OFF)
 option                      (wrapped_mpi    "MPI compiler wrapper requires no further MPI libs"     OFF)
 option                      (log            "Build DIY with logging"                                OFF)
+option                      (profile        "Build DIY with profiling"                              OFF)
 
 
 # Default to Release
@@ -25,12 +26,14 @@ if                          (log)
     add_definitions         (-DDIY_USE_SPDLOG)
     find_path               (SPDLOG_INCLUDE_DIR     spdlog/spdlog.h)
     include_directories     (${SPDLOG_INCLUDE_DIR})
-endif()
+endif                       ()
 
 # C++11
 set                         (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 
-add_definitions             (-DDIY_PROFILE)
+if                          (profile)
+    add_definitions         (-DDIY_PROFILE)
+endif                       ()
 
 # OSX flags
 if                          (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
