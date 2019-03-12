@@ -67,7 +67,7 @@ using namespace std;
 #define IEXCHANGE 0
 #endif
 
-int counter = 0, number_of_rounds = -1;
+int counter = 0;
 
 void InitSeeds(Block*                       b,
                int                          gid,
@@ -138,7 +138,6 @@ void TraceBlock(Block*                              b,
                 const Decomposer::BoolVector        share_face,
                 bool                                synth)
 {
-    number_of_rounds++;
     const int rank              = cp.master()->communicator().rank();
     const int gid               = cp.gid();
     diy::RegularLink<Bounds> *l = static_cast<diy::RegularLink<Bounds>*>(cp.link());
@@ -164,10 +163,8 @@ void TraceBlock(Block*                              b,
                            l->bounds().max[2] - l->bounds().min[2] + 1};
 
     // initialize seed particles first time
-    bool first_time = false;
     if (b->init == 0)
     {
-        first_time = true;
         int sr = (seed_rate < 1 ? 1 : seed_rate);
         InitSeeds(b, gid, decomposer, share_face, l, sr, st, sz, synth, particles);
     }
@@ -188,10 +185,6 @@ void TraceBlock(Block*                              b,
 
         }
     }
-
-    // debug
-//     if (particles.size())
-//         fprintf(stderr, "round %d gid %d dequeued %lu particles\n", number_of_rounds, cp.gid(), particles.size());
 
     // trace particles
 
@@ -277,10 +270,6 @@ void TraceBlock(Block*                              b,
     // stage all_reduce of total initialized and total finished particle traces
     cp.all_reduce(b->init, plus<int>());
     cp.all_reduce(b->done, plus<int>());
-
-    // debug
-//     if (nenq_particles)
-//         fprintf(stderr, "round %d gid %d enqueued %d particles\n", number_of_rounds, cp.gid(), nenq_particles);
 }
 
 #endif
@@ -323,10 +312,8 @@ bool trace_segment(Block*                               b,
                            l->bounds().max[2] - l->bounds().min[2] + 1};
 
     // initialize seed particles first time
-    bool first_time = false;
     if (b->init == 0)
     {
-        first_time = true;
         int sr = (seed_rate < 1 ? 1 : seed_rate);
         InitSeeds(b, gid, decomposer, share_face, l, sr, st, sz, synth, particles);
     }
@@ -497,6 +484,7 @@ int main(int argc, char **argv)
     bool check              = false;            // write out traces for checking
     std::string log_level   = "info";           // logging level
     int write_profile       = 0;                // write profile
+    int ntrials             = 1;                // number of trials
 
     Options ops(argc, argv);
     ops
@@ -515,6 +503,7 @@ int main(int argc, char **argv)
         >> Option('c', "check",         check,          "Write out traces for checking")
         >> Option('l', "log",           log_level,      "log level")
         >> Option('p', "profile",       write_profile,  "write profile")
+        >> Option('n', "trials",        ntrials,        "number of trials")
         ;
     bool fine = ops >> Present("fine", "Use fine-grain icommunicate");
 
@@ -581,29 +570,65 @@ int main(int argc, char **argv)
         fprintf(stderr, "starting particle tracing\n");
     }
 
-    MPI_Barrier(world);
-    double time_start = MPI_Wtime();
+    // incremental stats
+    double cur_mean_time            = 0.0;
+    double prev_mean_time           = 0.0;
+    double cur_std_time             = 0.0;
+    double prev_std_time            = 0.0;
+    double cur_mean_ncalls          = 0.0;
+    double prev_mean_ncalls         = 0.0;
+    double cur_std_ncalls           = 0.0;
+    double prev_std_ncalls          = 0.0;
 
-#if IEXCHANGE == 0
+    size_t nrounds;
+
+    for (int trial = 0; trial < ntrials; trial++)           // number of trials
+    {
+        MPI_Barrier(world);
+        double time_start = MPI_Wtime();
+
+        // trigger resetting of seed points
+        master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+                {
+                    b->init = 0;
+                });
+
+#if IEXCHANGE == 1
+
+        master.iexchange([&](Block* b, const diy::Master::ProxyWithLink& icp) -> bool
+                {
+                bool val = trace_segment(b,
+                        icp,
+                        decomposer,
+                        assigner,
+                        max_steps,
+                        seed_rate,
+                        share_face,
+                        synth);
+                return val;
+                }, min_queue_size, max_hold_time, fine);
+
+#else
+
         // particle tracing for either a maximum number of rounds or, if max_rounds == 0,
         // then for inifinitely many rounds until breaking out when done is true
         int stop = (max_rounds ? max_rounds : 1);
         int incr = (max_rounds ? 1 : 0);
-        for (int round = 0; round < stop; round += incr)
+
+        for (nrounds = 0; nrounds < stop; nrounds += incr)
         {
             master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
-            {
-                TraceBlock(b,
-                           cp,
-                           decomposer,
-                           assigner,
-                           max_steps,
-                           seed_rate,
-                           share_face,
-                           synth);
-            });
+                    {
+                    TraceBlock(b,
+                            cp,
+                            decomposer,
+                            assigner,
+                            max_steps,
+                            seed_rate,
+                            share_face,
+                            synth);
+                    });
             master.exchange();
-
 
             int init, done;
             for (int i = 0; i < master.size(); i++)
@@ -612,89 +637,86 @@ int main(int argc, char **argv)
                 done = master.proxy(i).get<int>();
             }
 
-            // debug
-            {
-//                 if (world.rank() == 0)
-//                     fprintf(stderr, "round=%d, INIT=%d, DONE=%d\n", round, init, done);
-                number_of_rounds = round;
-            }
             if (init == done && done != 0)
+            {
+                nrounds++;
                 break;
-
+            }
         }
+
 #endif
 
+        MPI_Barrier(world);
 
-#if IEXCHANGE == 1
-        master.iexchange([&](Block* b, const diy::Master::ProxyWithLink& icp) -> bool
+        double cur_time = MPI_Wtime() - time_start;
+
+        int cur_ncalls = 0;
+        MPI_Reduce(&counter, &cur_ncalls, 1, MPI_INT, MPI_SUM, 0, world);
+
+        // update incremental stats
+        // Knuth "The Art of Computer Programming, Volume 2: Seminumerical Algorithms", section 4.2.2
+        // originally B.P. Welford, Technometrics, 4,(1962), 419-420
+        if (trial == 0)
         {
-            bool val = trace_segment(b,
-                                     icp,
-                                     decomposer,
-                                     assigner,
-                                     max_steps,
-                                     seed_rate,
-                                     share_face,
-                                     synth);
-            return val;
-        }, min_queue_size, max_hold_time, fine);
+            cur_mean_time   = cur_time;
+            cur_mean_ncalls = cur_ncalls;
+            cur_std_time    = 0.0;
+            cur_std_ncalls  = 0.0;
+        }
+        else
+        {
+            cur_mean_time   = prev_mean_time   + (cur_time   - prev_mean_time)   / (trial + 1);
+            cur_mean_ncalls = prev_mean_ncalls + (cur_ncalls - prev_mean_ncalls) / (trial + 1);
+            cur_std_time    = prev_std_time    + (cur_time   - prev_mean_time)   * (cur_time   - cur_mean_time);
+            cur_std_ncalls  = prev_std_ncalls  + (cur_ncalls - prev_mean_ncalls) * (cur_ncalls - cur_mean_ncalls);
+        }
+        prev_mean_time      = cur_mean_time;
+        prev_mean_ncalls    = cur_mean_ncalls;
+        prev_std_time       = cur_std_time;
+        prev_std_ncalls     = cur_std_ncalls;
 
-#endif
+        // debug
+        if (world.rank() == 0)
+            fmt::print(stderr, "trial {} time {} ncalls {}\n", trial, cur_time, cur_ncalls);
 
-    MPI_Barrier(world);
+        // merge-reduce traces to one block
+        int k = 2;                               // the radix of the k-ary reduction tree
+        diy::RegularMergePartners  partners(decomposer, k);
+        diy::reduce(master, assigner, partners, &merge_traces);
 
-//     if (world.rank() == 0)
-//         fprintf(stderr, "Particle tracing done. Collecting stats.\n");
-
-    double time_end = MPI_Wtime();
-
-    int all_counter=0;
-    MPI_Reduce(&counter, &all_counter, 1, MPI_INT, MPI_SUM, 0, world);
-
-//     if (world.rank() == 0)
-//         fprintf(stderr, "MPI_Reduce done. Doing diy reduce.\n");
-
-    // merge-reduce traces to one block
-    int k = 2;                               // the radix of the k-ary reduction tree
-    diy::RegularMergePartners  partners(decomposer, k);
-    diy::reduce(master, assigner, partners, &merge_traces);
-
-    // rendering
+        // rendering
 #ifdef WITH_VTK
 #if 0                       // render one block with all traces
-    if (world.rank() == 0)
-    {
-        fprintf(stderr, "converting particle traces to vtk polylines and rendering 1 block only\n");
-        ((Block*)master.block(0))->render();
-    }
+        if (world.rank() == 0)
+        {
+            fprintf(stderr, "converting particle traces to vtk polylines and rendering 1 block only\n");
+            ((Block*)master.block(0))->render();
+        }
 #else                       // debugging: render individual blocks
-    if (world.rank() == 0)
-        fprintf(stderr, "converting particle traces to vtk polylines and rendering all blocks\n");
-    master.foreach(&Block::render_block);
+        if (world.rank() == 0)
+            fprintf(stderr, "converting particle traces to vtk polylines and rendering all blocks\n");
+        master.foreach(&Block::render_block);
 #endif
 #endif
 
-//     if (world.rank() == 0)
-//         fprintf(stderr, "Diy reduce done. Writing profile output.\n");
-
-    // output profile
-    if (write_profile)
-    {
+        // output profile
+        if (write_profile)
+        {
 #if IEXCHANGE == 1
-        diy::io::SharedOutFile prof_out(fmt::format("profile-iexchange-p{}-b{}.txt", world.size(), nblocks), world);
+            diy::io::SharedOutFile prof_out(fmt::format("profile-iexchange-p{}-b{}.txt", world.size(), nblocks), world);
 #else
-        diy::io::SharedOutFile prof_out(fmt::format("profile-exchange-p{}-b{}.txt", world.size(), nblocks), world);
+            diy::io::SharedOutFile prof_out(fmt::format("profile-exchange-p{}-b{}.txt", world.size(), nblocks), world);
 #endif
-        master.prof.output(prof_out, std::to_string(world.rank()));
-        prof_out.close();
-    }
+            master.prof.output(prof_out, std::to_string(world.rank()));
+            prof_out.close();
+        }
+    }           // number of trials
 
     // print stats
     if (world.rank() == 0)
     {
-
-        // all_counter: number of callbacks in case of IEXCHANGE
-        // number_of_rounds: number of rounds in case of SYNCHRONOUS
+        // ncalls: number of calls in case of IEXCHANGE
+        // nrounds: number of rounds in case of EXCHANGE
         fmt::print(stderr, "---------- stats ----------\n");
 #if IEXCHANGE == 1
         fmt::print(stderr, "using iexchange\n");
@@ -706,11 +728,14 @@ int main(int argc, char **argv)
         fmt::print(stderr, "seed rate:\t\t\t{}\n",              seed_rate);
         fmt::print(stderr, "nprocs:\t\t\t{}\n",                 world.size());
         fmt::print(stderr, "nblocks:\t\t\t{}\n",                nblocks);
-        fmt::print(stderr, "time (s):\t\t\t{}\n",               time_end - time_start);
+        fmt::print(stderr, "ntrials:\t\t\t{}\n",                ntrials);
+        fmt::print(stderr, "mean time (s):\t\t{}\n",            cur_mean_time);
+        fmt::print(stderr, "std dev time (s):\t\t{}\n",         sqrt(cur_std_time / (ntrials - 1)));
 #if IEXCHANGE == 1
-        fmt::print(stderr, "# callbacks:\t\t{}\n",              all_counter);
+        fprintf(stderr, "mean # callbacks:\t\t%.0lf\n",         cur_mean_ncalls);
+        fprintf(stderr, "std dev # callbacks:\t%.0lf\n",        sqrt(cur_std_ncalls / (ntrials - 1)));
 #else
-        fmt::print(stderr, "# rounds:\t\t\t{}\n",               number_of_rounds);
+        fmt::print(stderr, "# rounds:\t\t\t{}\n",               nrounds);
 #endif
 
         char infile[256];           // profile file name
@@ -721,6 +746,7 @@ int main(int argc, char **argv)
 #endif
 
         // count number of occurences of send-same-rank plus send-different rank in profile
+        // NB: only for the last trial; profile is overwritten for each trial
         if (write_profile)
         {
             char cmd[256];
