@@ -495,7 +495,8 @@ int main(int argc, char **argv)
     float slow_vel          = 1.0;              // slow velocity for synthetic data
     float fast_vel          = 10.0;             // fast velocity for synthetic data
     bool check              = false;            // write out traces for checking
-    std::string log_level   = "info";
+    std::string log_level   = "info";           // logging level
+    int write_profile       = 0;                // write profile
 
     Options ops(argc, argv);
     ops
@@ -513,6 +514,7 @@ int main(int argc, char **argv)
         >> Option('f', "fast-vel",      fast_vel,       "Fast velocity for synthetic data")
         >> Option('c', "check",         check,          "Write out traces for checking")
         >> Option('l', "log",           log_level,      "log level")
+        >> Option('p', "profile",       write_profile,  "write profile")
         ;
     bool fine = ops >> Present("fine", "Use fine-grain icommunicate");
 
@@ -612,7 +614,8 @@ int main(int argc, char **argv)
 
             // debug
             {
-//                 fprintf(stderr, "round=%d, INIT=%d, DONE=%d\n", round, init, done);
+//                 if (world.rank() == 0)
+//                     fprintf(stderr, "round=%d, INIT=%d, DONE=%d\n", round, init, done);
                 number_of_rounds = round;
             }
             if (init == done && done != 0)
@@ -639,10 +642,17 @@ int main(int argc, char **argv)
 #endif
 
     MPI_Barrier(world);
+
+//     if (world.rank() == 0)
+//         fprintf(stderr, "Particle tracing done. Collecting stats.\n");
+
     double time_end = MPI_Wtime();
 
     int all_counter=0;
     MPI_Reduce(&counter, &all_counter, 1, MPI_INT, MPI_SUM, 0, world);
+
+//     if (world.rank() == 0)
+//         fprintf(stderr, "MPI_Reduce done. Doing diy reduce.\n");
 
     // merge-reduce traces to one block
     int k = 2;                               // the radix of the k-ary reduction tree
@@ -664,14 +674,20 @@ int main(int argc, char **argv)
 #endif
 #endif
 
+//     if (world.rank() == 0)
+//         fprintf(stderr, "Diy reduce done. Writing profile output.\n");
+
     // output profile
+    if (write_profile)
+    {
 #if IEXCHANGE == 1
-    diy::io::SharedOutFile prof_out(fmt::format("profile-iexchange-p{}-b{}.txt", world.size(), nblocks), world);
+        diy::io::SharedOutFile prof_out(fmt::format("profile-iexchange-p{}-b{}.txt", world.size(), nblocks), world);
 #else
-    diy::io::SharedOutFile prof_out(fmt::format("profile-exchange-p{}-b{}.txt", world.size(), nblocks), world);
+        diy::io::SharedOutFile prof_out(fmt::format("profile-exchange-p{}-b{}.txt", world.size(), nblocks), world);
 #endif
-    master.prof.output(prof_out, std::to_string(world.rank()));
-    prof_out.close();
+        master.prof.output(prof_out, std::to_string(world.rank()));
+        prof_out.close();
+    }
 
     // print stats
     if (world.rank() == 0)
@@ -705,21 +721,24 @@ int main(int argc, char **argv)
 #endif
 
         // count number of occurences of send-same-rank plus send-different rank in profile
-        char cmd[256];
-        sprintf(cmd, "grep -c '>send-.*-rank' %s", infile);
-        char buf[256];
-        size_t ncalls;
-        FILE* pipe(popen(cmd, "r"));
-        if (!pipe)
+        if (write_profile)
         {
-            fprintf(stderr, "Error: popen failed\n");
-            abort();
+            char cmd[256];
+            sprintf(cmd, "grep -c '>send-.*-rank' %s", infile);
+            char buf[256];
+            size_t ncalls;
+            FILE* pipe(popen(cmd, "r"));
+            if (!pipe)
+            {
+                fprintf(stderr, "Error: popen failed\n");
+                abort();
+            }
+            while (!feof(pipe))
+                if (fgets(buf, 128, pipe) != NULL)
+                    ncalls = atol(buf);
+            pclose(pipe);
+            fmt::print(stderr, "# send calls:\t\t{}\n",             ncalls);
         }
-        while (!feof(pipe))
-            if (fgets(buf, 128, pipe) != NULL)
-                ncalls = atol(buf);
-        pclose(pipe);
-        fmt::print(stderr, "# send calls:\t\t{}\n",             ncalls);
 
         fmt::print(stderr, "---------------------------\n");
     }
