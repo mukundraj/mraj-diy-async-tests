@@ -233,9 +233,9 @@ void TraceBlock(Block*                              b,
             // TODO: deal with multiple dests, also match with the ASYNC case
             // either send to first block that is not me or perturb the point along velocity
             //          for (size_t j = 0; j < dests.size(); j++)
-            for (size_t j = 0; j < 1; j++)
+            if (dests.size())
             {
-                diy::BlockID bid = l->target(dests[j]);
+                diy::BlockID bid = l->target(dests[0]);
                 outgoing_endpts[bid].push_back(out_pt);
                 // fprintf(stderr, "gid %d enqueue [%.3f %.3f %.3f] to gid %d\n",
                 //         gid, out_pt[0], out_pt[1], out_pt[2], bid.gid);
@@ -349,10 +349,12 @@ bool trace_segment(Block*                               b,
             insert_iterator<vector<int> > insert_it(dests, it);
             diy::in(*l, next_p.coords, insert_it, decomposer.domain);
             EndPt out_pt(s);
+            // TODO: deal with multiple dests, also match with the ASYNC case
+            // either send to first block that is not me or perturb the point along velocity
             //for (size_t j = 0; j < dests.size(); j++)
-            for (size_t j = 0; j < 1; j++)
+            if (dests.size())
             {
-                diy::BlockID bid = l->target(dests[j]);
+                diy::BlockID bid = l->target(dests[0]);
                 icp.enqueue(bid, out_pt);
 
                 //                outgoing_endpts[bid].push_back(out_pt);
