@@ -536,9 +536,6 @@ int main(int argc, char **argv)
 
     for (int trial = 0; trial < ntrials; trial++)           // number of trials
     {
-        MPI_Barrier(world);
-        double time_start = MPI_Wtime();
-
         // reset the block particle traces, but leave the vector field intact
         master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
                 {
@@ -547,6 +544,9 @@ int main(int argc, char **argv)
                     b->nvecs    = 0;
                     b->segments.clear();
                 });
+
+        MPI_Barrier(world);
+        double time_start = MPI_Wtime();
 
 #if IEXCHANGE == 1
 
