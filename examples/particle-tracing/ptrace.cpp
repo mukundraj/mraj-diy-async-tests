@@ -208,17 +208,8 @@ void TraceBlock(Block*                              b,
         }
         b->segments.push_back(s);
 
-        //        Pt        end_pt;
-        //        end_pt.coords[0] = next_p[0];
-        //        end_pt.coords[1] = next_p[1];
-        //        end_pt.coords[2] = next_p[2];
-
-
-        //        if (!s.inside(decomposer.domain.min, decomposer.domain.max)) // out of global domain
-        // if (!inside(end_pt, decomposer.domain))
         if (!inside(next_p, decomposer.domain))
             finished = true;
-
 
         if (finished)                    // this segment is done
             b->done++;
@@ -229,16 +220,10 @@ void TraceBlock(Block*                              b,
             insert_iterator<vector<int> > insert_it(dests, it);
             diy::in(*l, next_p.coords, insert_it, decomposer.domain);
             EndPt out_pt(s);
-
-            // TODO: deal with multiple dests, also match with the ASYNC case
-            // either send to first block that is not me or perturb the point along velocity
-            //          for (size_t j = 0; j < dests.size(); j++)
             if (dests.size())
             {
-                diy::BlockID bid = l->target(dests[0]);
+                diy::BlockID bid = l->target(dests[0]); // in case of multiple dests, send to first dest only
                 outgoing_endpts[bid].push_back(out_pt);
-                // fprintf(stderr, "gid %d enqueue [%.3f %.3f %.3f] to gid %d\n",
-                //         gid, out_pt[0], out_pt[1], out_pt[2], bid.gid);
             }
         }
     }
@@ -311,10 +296,6 @@ bool trace_segment(Block*                               b,
         }
     }
 
-    // debug
-//     if (particles.size())
-//         fprintf(stderr, "counter %d gid %d dequeued %lu particles\n", counter, icp.gid(), particles.size());
-
     // trace particles
 
     for (int i = 0; i < particles.size(); i++)
@@ -342,24 +323,17 @@ bool trace_segment(Block*                               b,
 
         if (finished)                    // this segment is done
             b->done++;
-        else                               // asyncronously send out segment
+        else                             // enqueue endpoint
         {
             vector<int> dests;
             vector<int>::iterator it = dests.begin();
             insert_iterator<vector<int> > insert_it(dests, it);
             diy::in(*l, next_p.coords, insert_it, decomposer.domain);
             EndPt out_pt(s);
-            // TODO: deal with multiple dests, also match with the ASYNC case
-            // either send to first block that is not me or perturb the point along velocity
-            //for (size_t j = 0; j < dests.size(); j++)
             if (dests.size())
             {
-                diy::BlockID bid = l->target(dests[0]);
+                diy::BlockID bid = l->target(dests[0]); // in case of multiple dests, send to first dest only
                 icp.enqueue(bid, out_pt);
-
-                //                outgoing_endpts[bid].push_back(out_pt);
-                // fprintf(stderr, "gid %d enqueue [%.3f %.3f %.3f] to gid %d\n",
-                //         gid, out_pt[0], out_pt[1], out_pt[2], bid.gid);
             }
         }
     }
@@ -435,7 +409,7 @@ int main(int argc, char **argv)
     int synth               = 0;                // generate various synthetic input datasets
     float slow_vel          = 1.0;              // slow velocity for synthetic data
     float fast_vel          = 10.0;             // fast velocity for synthetic data
-    bool check              = false;            // write out traces for checking
+    int check               = 0;                // write out traces for checking
     std::string log_level   = "info";           // logging level
     int ntrials             = 1;                // number of trials
 
@@ -449,7 +423,7 @@ int main(int argc, char **argv)
         >> Option('h', "hdr-bytes",     hdr_bytes,      "Skip this number bytes header in infile")
         >> Option('r', "max-rounds",    max_rounds,     "Max number of rounds to trace")
         >> Option('q', "min-q-size",    min_queue_size, "Minimum queue size (bytes) for iexchange")
-        >> Option('o', "max-hold-time", max_hold_time,  "Minimum queue size (bytes) for iexchange")
+        >> Option('o', "max-hold-time", max_hold_time,  "Maximum queue hold time (ms) for iexchange")
         >> Option('x', "synthetic",     synth,          "Generate various synthetic flows")
         >> Option('w', "slow-vel",      slow_vel,       "Slow velocity for synthetic data")
         >> Option('f', "fast-vel",      fast_vel,       "Fast velocity for synthetic data")
