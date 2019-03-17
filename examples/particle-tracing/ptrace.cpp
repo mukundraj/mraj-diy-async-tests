@@ -143,7 +143,8 @@ void TraceBlock(Block*                              b,
     diy::RegularLink<Bounds> *l = static_cast<diy::RegularLink<Bounds>*>(cp.link());
     map<diy::BlockID, vector<Pt> > outgoing_pts;
 
-    vector<EndPt> particles;
+    vector<EndPt>& particles = b->particles;
+    particles.clear();
     map<diy::BlockID, vector<EndPt> > outgoing_endpts;
 
     const float *vec[3] = {b->vel[0],
@@ -571,6 +572,23 @@ int main(int argc, char **argv)
                 nrounds++;
                 break;
             }
+        }
+
+        if (nrounds == max_rounds)
+        {
+            master.foreach([](Block* b, const diy::Master::ProxyWithLink& cp)
+            {
+                if (b->particles.size() > 0)
+                {
+                    fmt::print("gid = {}, particles size = {}\n", cp.gid(), b->particles.size());
+                    auto* l = static_cast<RGLink*>(cp.link());
+                    fmt::print("  core = {} - {}, bounds = {} - {}\n",
+                                    l->core().min,   l->core().max,
+                                    l->bounds().min, l->bounds().max);
+                    for (auto& p : b->particles)
+                        fmt::print("  {}\n", p.pt.coords);
+                }
+            });
         }
 
 #endif

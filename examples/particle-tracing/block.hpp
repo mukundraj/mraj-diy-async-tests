@@ -228,6 +228,7 @@ struct Block
     size_t               nvecs;              // number of velocity vectors
     int                  init, done;         // initial and done flags
     vector<Segment>      segments;           // finished segments of particle traces
+    vector<EndPt>        particles;
 
 #ifdef WITH_VTK
     vtkNew<vtkPoints>    points;             // points to be traced
