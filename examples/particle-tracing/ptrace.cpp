@@ -7,7 +7,7 @@
 // 9700 S. Cass Ave.
 // Argonne, IL 60439
 //
-// copied and modified with permission by Tom Peterka
+// copied and modified with permission by Tom Peterka and Mukund Raj
 // tpeterka@mcs.anl.gov
 //
 //--------------------------------------------------------------------------
@@ -86,10 +86,6 @@ void InitSeeds(Block*                       b,
     if (synth && coords[0])
         return;
 
-        // debug
-//         fmt::print(stderr, "gid={} st=[{} {} {}] sz=[{} {} {}] coords=[{} {} {}]\n",
-//                 gid, st[0], st[1], st[2], sz[0], sz[1], sz[2], coords[0], coords[1], coords[2]);
-
     // for synthetic data, seed only -x side of the block
     int end = synth ? st[0] + 1: st[0] + sz[0];
     for (int i = st[0]; i < end; i += sr)
@@ -117,9 +113,6 @@ void InitSeeds(Block*                       b,
                 p[0] = i;  p[1] = j;  p[2] = k;
                 particles.push_back(p);
 
-                // debug
-//                 fmt::print(stderr, "p=[{} {} {}]\n", p[0], p[1], p[2]);
-
                 b->init++; // needed for both
 
             }
@@ -127,25 +120,15 @@ void InitSeeds(Block*                       b,
     }
 }
 
-#if IEXCHANGE == 0                        // callback for synchronous exchange version
-
-void TraceBlock(Block*                              b,
-                const diy::Master::ProxyWithLink&   cp,
-                const Decomposer&                   decomposer,
-                const diy::Assigner&                assigner,
-                const int                           max_steps,
-                const int                           seed_rate,
-                const Decomposer::BoolVector        share_face,
-                bool                                synth)
+void trace_particles(Block*                             b,
+                     vector<EndPt>                      particles,
+                     const diy::Master::ProxyWithLink&  cp,
+                     const Decomposer&                  decomposer,
+                     const int                          max_steps,
+                     map<diy::BlockID, vector<EndPt> >& outgoing_endpts,
+                     bool                               iexchange)
 {
-    const int rank              = cp.master()->communicator().rank();
-    const int gid               = cp.gid();
     diy::RegularLink<Bounds> *l = static_cast<diy::RegularLink<Bounds>*>(cp.link());
-    map<diy::BlockID, vector<Pt> > outgoing_pts;
-
-    vector<EndPt>& particles = b->particles;
-    particles.clear();
-    map<diy::BlockID, vector<EndPt> > outgoing_endpts;
 
     const float *vec[3] = {b->vel[0],
                            b->vel[1],
@@ -162,6 +145,79 @@ void TraceBlock(Block*                              b,
     const int   gsz[3]  = {l->bounds().max[0] - l->bounds().min[0] + 1,
                            l->bounds().max[1] - l->bounds().min[1] + 1,
                            l->bounds().max[2] - l->bounds().min[2] + 1};
+
+    for (int i = 0; i < particles.size(); i++)
+    {
+        Pt&     cur_p = particles[i].pt; // current end point
+        Segment s(particles[i]);         // segment with one point p
+        Pt      next_p;                  // coordinates of next end point
+        bool    finished = false;
+
+        // trace this segment as far as it will go in the local vector field
+        while (trace_3D_rk1(gst, gsz, st, sz, vec, cur_p.coords.data(), 0.5, next_p.coords.data()))
+        {
+            particles[i].nsteps++;
+            s.pts.push_back(next_p);
+            cur_p = next_p;
+            if (particles[i].nsteps >= max_steps)
+            {
+                finished = true;
+                break;
+            }
+        }
+        b->segments.push_back(s);
+
+        if (!inside(next_p, decomposer.domain))
+            finished = true;
+
+        if (finished)                    // this segment is done
+            b->done++;
+        else                             // find destination of segment endpoint
+        {
+            vector<int> dests;
+            vector<int>::iterator it = dests.begin();
+            insert_iterator<vector<int> > insert_it(dests, it);
+            diy::in(*l, next_p.coords, insert_it, decomposer.domain);
+            EndPt out_pt(s);
+            out_pt.nsteps = particles[i].nsteps;
+            if (dests.size())
+            {
+                diy::BlockID bid = l->target(dests[0]); // in case of multiple dests, send to first dest only
+                if (iexchange)                          // enqueuing single endpoint allows fine-grain iexchange if desired
+                    cp.enqueue(bid, out_pt);
+                else
+                    outgoing_endpts[bid].push_back(out_pt); // vector of endpoints
+            }
+        }
+    }
+}
+
+#if IEXCHANGE == 0                        // callback for synchronous exchange version
+
+void trace_block_exchange(Block*                              b,
+                          const diy::Master::ProxyWithLink&   cp,
+                          const Decomposer&                   decomposer,
+                          const diy::Assigner&                assigner,
+                          const int                           max_steps,
+                          const int                           seed_rate,
+                          const Decomposer::BoolVector        share_face,
+                          bool                                synth)
+{
+    const int rank              = cp.master()->communicator().rank();
+    const int gid               = cp.gid();
+    diy::RegularLink<Bounds> *l = static_cast<diy::RegularLink<Bounds>*>(cp.link());
+    map<diy::BlockID, vector<Pt> > outgoing_pts;
+
+    vector<EndPt>& particles = b->particles;
+    particles.clear();
+    map<diy::BlockID, vector<EndPt> > outgoing_endpts;
+
+    const int   st[3]   = {l->core().min[0],
+                           l->core().min[1],
+                           l->core().min[2]};
+    const int   sz[3]   = {l->core().max[0] - l->core().min[0] + 1,
+                           l->core().max[1] - l->core().min[1] + 1,
+                           l->core().max[2] - l->core().min[2] + 1};
 
     // initialize seed particles first time
     if (b->init == 0)
@@ -179,59 +235,19 @@ void TraceBlock(Block*                              b,
         {
             vector<EndPt> incoming_endpts;
             cp.dequeue(in[i], incoming_endpts);
-            for (size_t j = 0; j < incoming_endpts.size(); j++) {
+            for (size_t j = 0; j < incoming_endpts.size(); j++)
+            {
                 incoming_endpts[j].sid++;
                 particles.push_back(incoming_endpts[j]);
             }
-
         }
     }
 
     // trace particles
-
-    for (int i = 0; i < particles.size(); i++)
-    {
-        Pt&     cur_p = particles[i].pt; // current end point
-        Segment s(particles[i]);         // segment with one point p
-        Pt      next_p;                  // coordinates of next end point
-        bool    finished = false;
-
-        // trace this segment as far as it will go in the local vector field
-        while (trace_3D_rk1(gst, gsz, st, sz, vec, cur_p.coords.data(), 0.5, next_p.coords.data()))
-        {
-            s.pts.push_back(next_p);
-            cur_p = next_p;
-            if (s.pts.size() >= max_steps)
-            {
-                finished = true;
-                break;
-            }
-        }
-        b->segments.push_back(s);
-
-        if (!inside(next_p, decomposer.domain))
-            finished = true;
-
-        if (finished)                    // this segment is done
-            b->done++;
-        else                             // package segment endpoint in vector for enqueueing
-        {
-            vector<int> dests;
-            vector<int>::iterator it = dests.begin();
-            insert_iterator<vector<int> > insert_it(dests, it);
-            diy::in(*l, next_p.coords, insert_it, decomposer.domain);
-            EndPt out_pt(s);
-            if (dests.size())
-            {
-                diy::BlockID bid = l->target(dests[0]); // in case of multiple dests, send to first dest only
-                outgoing_endpts[bid].push_back(out_pt);
-            }
-        }
-    }
+    trace_particles(b, particles, cp, decomposer, max_steps, outgoing_endpts, false);
 
     // enqueue the vectors of endpoints
-    for (map<diy::BlockID, vector<EndPt> >::const_iterator it =
-         outgoing_endpts.begin(); it != outgoing_endpts.end(); it++)
+    for (map<diy::BlockID, vector<EndPt> >::const_iterator it = outgoing_endpts.begin(); it != outgoing_endpts.end(); it++)
         cp.enqueue(it->first, it->second);
 
     // stage all_reduce of total initialized and total finished particle traces
@@ -243,40 +259,29 @@ void TraceBlock(Block*                              b,
 
 #if IEXCHANGE == 1                                // callback for asynchronous iexchange version
 
-bool trace_segment(Block*                               b,
-                   const diy::Master::ProxyWithLink&    icp,
-                   const Decomposer&                    decomposer,
-                   const diy::Assigner&                 assigner,
-                   const int                            max_steps,
-                   const int                            seed_rate,
-                   const Decomposer::BoolVector         share_face,
-                   int                                  synth)
-
+bool trace_block_iexchange(Block*                               b,
+                           const diy::Master::ProxyWithLink&    cp,
+                           const Decomposer&                    decomposer,
+                           const diy::Assigner&                 assigner,
+                           const int                            max_steps,
+                           const int                            seed_rate,
+                           const Decomposer::BoolVector         share_face,
+                           int                                  synth)
 {
     counter++;
-    const int rank              = icp.master()->communicator().rank();
-    const int gid               = icp.gid();
-    diy::RegularLink<Bounds> *l = static_cast<diy::RegularLink<Bounds>*>(icp.link());
+    const int gid               = cp.gid();
+    diy::RegularLink<Bounds> *l = static_cast<diy::RegularLink<Bounds>*>(cp.link());
     map<diy::BlockID, vector<Pt> > outgoing_pts;
 
-    vector<EndPt> particles;
+    vector<EndPt>   particles;
     map<diy::BlockID, vector<EndPt> > outgoing_endpts;
 
-    const float *vec[3] = {b->vel[0],
-                           b->vel[1],
-                           b->vel[2]};
     const int   st[3]   = {l->core().min[0],
                            l->core().min[1],
                            l->core().min[2]};
     const int   sz[3]   = {l->core().max[0] - l->core().min[0] + 1,
                            l->core().max[1] - l->core().min[1] + 1,
                            l->core().max[2] - l->core().min[2] + 1};
-    const int   gst[3]  = {l->bounds().min[0],
-                           l->bounds().min[1],
-                           l->bounds().min[2]};
-    const int   gsz[3]  = {l->bounds().max[0] - l->bounds().min[0] + 1,
-                           l->bounds().max[1] - l->bounds().min[1] + 1,
-                           l->bounds().max[2] - l->bounds().min[2] + 1};
 
     // initialize seed particles first time
     if (b->init == 0)
@@ -289,55 +294,16 @@ bool trace_segment(Block*                               b,
     for (size_t i = 0; i < l->size(); ++i)
     {
         int nbr_gid = l->target(i).gid;
-        while (icp.incoming(nbr_gid))
+        while (cp.incoming(nbr_gid))
         {
             EndPt incoming_endpt;
-            icp.dequeue(nbr_gid, incoming_endpt);
+            cp.dequeue(nbr_gid, incoming_endpt);
             particles.push_back(incoming_endpt);
         }
     }
 
     // trace particles
-
-    for (int i = 0; i < particles.size(); i++)
-    {
-        Pt&     cur_p = particles[i].pt; // current end point
-        Segment s(particles[i]);         // segment with one point p
-        Pt      next_p;                  // coordinates of next end point
-        bool    finished = false;
-
-        // trace this segment as far as it will go in the local vector field
-        while (trace_3D_rk1(gst, gsz, st, sz, vec, cur_p.coords.data(), 0.5, next_p.coords.data()))
-        {
-            s.pts.push_back(next_p);
-            cur_p = next_p;
-            if (s.pts.size() >= max_steps)
-            {
-                finished = true;
-                break;
-            }
-        }
-        b->segments.push_back(s);
-
-        if (!inside(next_p, decomposer.domain))
-            finished = true;
-
-        if (finished)                    // this segment is done
-            b->done++;
-        else                             // enqueue endpoint
-        {
-            vector<int> dests;
-            vector<int>::iterator it = dests.begin();
-            insert_iterator<vector<int> > insert_it(dests, it);
-            diy::in(*l, next_p.coords, insert_it, decomposer.domain);
-            EndPt out_pt(s);
-            if (dests.size())
-            {
-                diy::BlockID bid = l->target(dests[0]); // in case of multiple dests, send to first dest only
-                icp.enqueue(bid, out_pt);
-            }
-        }
-    }
+    trace_particles(b, particles, cp, decomposer, max_steps, outgoing_endpts, true);
 
     return true;
 }
@@ -349,7 +315,6 @@ void merge_traces(void* b_, const diy::ReduceProxy& rp, const diy::RegularMergeP
 {
     Block* b = static_cast<Block*>(b_);
 
-
     // dequeue and merge
     for (unsigned i = 0; i < rp.in_link().size(); ++i)
     {
@@ -357,11 +322,8 @@ void merge_traces(void* b_, const diy::ReduceProxy& rp, const diy::RegularMergeP
         if (nbr_gid == rp.gid())               // skip self
             continue;
 
-
-
         vector<Segment> in_traces;
         rp.dequeue(nbr_gid, in_traces);
-
 
         // append in_traces to segments
         // TODO: the right way is to sort segments with the same pid into increasing sid order
@@ -373,16 +335,12 @@ void merge_traces(void* b_, const diy::ReduceProxy& rp, const diy::RegularMergeP
     // enqueue
     // NB, for a merge, the out_link size is 1; ie, there is only one target
 
-    //    printf("size %d\n", rp.out_link().size());
     if (rp.out_link().size()){
         int nbr_gid = rp.out_link().target(0).gid;
         if (rp.out_link().size() && nbr_gid != rp.gid()) // skip self
             rp.enqueue(rp.out_link().target(0), b->segments);
     }
-
 }
-
-
 
 int main(int argc, char **argv)
 {
@@ -527,15 +485,15 @@ int main(int argc, char **argv)
 
         master.iexchange([&](Block* b, const diy::Master::ProxyWithLink& icp) -> bool
                 {
-                bool val = trace_segment(b,
-                        icp,
-                        decomposer,
-                        assigner,
-                        max_steps,
-                        seed_rate,
-                        share_face,
-                        synth);
-                return val;
+                    bool val = trace_block_iexchange(b,
+                                                     icp,
+                                                     decomposer,
+                                                     assigner,
+                                                     max_steps,
+                                                     seed_rate,
+                                                     share_face,
+                                                     synth);
+                    return val;
                 }, min_queue_size, max_hold_time, fine);
 
 #else
@@ -545,18 +503,21 @@ int main(int argc, char **argv)
         int stop = (max_rounds ? max_rounds : 1);
         int incr = (max_rounds ? 1 : 0);
 
-        for (nrounds = 0; nrounds < stop; nrounds += incr)
+        int nrounds = 0;
+        for (int round = 0; round < stop; round += incr)
         {
+            nrounds++;
+
             master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
                     {
-                    TraceBlock(b,
-                            cp,
-                            decomposer,
-                            assigner,
-                            max_steps,
-                            seed_rate,
-                            share_face,
-                            synth);
+                        trace_block_exchange(b,
+                                             cp,
+                                             decomposer,
+                                             assigner,
+                                             max_steps,
+                                             seed_rate,
+                                             share_face,
+                                             synth);
                     });
             master.exchange();
 
@@ -568,25 +529,26 @@ int main(int argc, char **argv)
             }
 
             if (init == done && done != 0)
-            {
-                nrounds++;
                 break;
-            }
         }
 
         if (nrounds == max_rounds)
         {
+            if (world.rank() == 0)
+                fmt::print(stderr, "*** Warning: max # rounds for exchange has been reached. ***\n");
+
+            // debug: print unterminated particles
             master.foreach([](Block* b, const diy::Master::ProxyWithLink& cp)
             {
                 if (b->particles.size() > 0)
                 {
-                    fmt::print("gid = {}, particles size = {}\n", cp.gid(), b->particles.size());
+                    fmt::print(stderr, "gid = {}, particles size = {}\n", cp.gid(), b->particles.size());
                     auto* l = static_cast<RGLink*>(cp.link());
-                    fmt::print("  core = {} - {}, bounds = {} - {}\n",
+                    fmt::print(stderr, "  core = {} - {}, bounds = {} - {}\n",
                                     l->core().min,   l->core().max,
                                     l->bounds().min, l->bounds().max);
                     for (auto& p : b->particles)
-                        fmt::print("  {}\n", p.pt.coords);
+                        fmt::print(stderr, "  {}\n", p.pt.coords);
                 }
             });
         }
@@ -601,7 +563,7 @@ int main(int argc, char **argv)
         MPI_Reduce(&counter, &cur_ncalls, 1, MPI_INT, MPI_SUM, 0, world);
 
         // update incremental stats
-        // Knuth "The Art of Computer Programming, Volume 2: Seminumerical Algorithms", section 4.2.2
+        // ref: Knuth "The Art of Computer Programming, Volume 2: Seminumerical Algorithms", section 4.2.2
         // originally B.P. Welford, Technometrics, 4,(1962), 419-420
         if (trial == 0)
         {

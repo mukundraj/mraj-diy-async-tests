@@ -29,13 +29,10 @@ typedef diy::RegularDecomposer<Bounds> Decomposer;
 // one point
 struct Pt
 {
-    //float coords[3];                         // (x, y, z)
     diy::Point<float, 3>    coords;
 };
 
 // whether a point is inside given bounds
-
-
 bool inside(const Pt& pt, const Bounds bounds)
 {
     for (int i = 0; i < 3; i++)
@@ -50,6 +47,7 @@ struct EndPt
     int  pid;                                // particle ID
     Pt   pt;                                 // end pointof the trace
     int  sid;                                // segment ID of this part of the trace
+    int  nsteps;                             // number of steps this particle went so far
 
     const float& operator [](int i) const { return pt.coords[i]; }
     float& operator [](int i)             { return pt.coords[i]; }
@@ -58,6 +56,7 @@ struct EndPt
         {
             pid      = 0;
             sid      = 0;
+            nsteps   = 0;
         }
     EndPt(struct Segment& s);                // extract the end point of a segment
 };
