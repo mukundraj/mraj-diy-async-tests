@@ -275,7 +275,8 @@ bool trace_block_iexchange(Block*                               b,
     const int gid               = cp.gid();
     diy::RegularLink<Bounds> *l = static_cast<diy::RegularLink<Bounds>*>(cp.link());
 
-    vector<EndPt>   particles;
+    vector<EndPt>& particles = b->particles;
+    particles.clear();
     map<diy::BlockID, vector<EndPt> > outgoing_endpts;  // needed to call trace_particles() but otherwise unused in iexchange
 
     const int   st[3]   = {l->core().min[0],
