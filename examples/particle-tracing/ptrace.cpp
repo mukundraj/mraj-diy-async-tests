@@ -201,7 +201,8 @@ void trace_block_exchange(Block*                              b,
                           const int                           max_steps,
                           const int                           seed_rate,
                           const Decomposer::BoolVector        share_face,
-                          bool                                synth)
+                          bool                                synth,
+                          double                              cur_consensus_time)
 {
     const int rank              = cp.master()->communicator().rank();
     const int gid               = cp.gid();
@@ -251,8 +252,10 @@ void trace_block_exchange(Block*                              b,
         cp.enqueue(it->first, it->second);
 
     // stage all_reduce of total initialized and total finished particle traces
+    double t0 = MPI_Wtime();
     cp.all_reduce(b->init, plus<int>());
     cp.all_reduce(b->done, plus<int>());
+    cur_consensus_time += (MPI_Wtime() - t0);
 }
 
 #endif
@@ -463,11 +466,21 @@ int main(int argc, char **argv)
     double prev_mean_ncalls         = 0.0;
     double cur_std_ncalls           = 0.0;
     double prev_std_ncalls          = 0.0;
+    double cur_mean_callback_time   = 0.0;                  // for exchange only
+    double prev_mean_callback_time  = 0.0;                  // for exchange only
+    double cur_mean_comm_time       = 0.0;                  // for exchange only
+    double prev_mean_comm_time      = 0.0;                  // for exchange only
+    double cur_mean_consensus_time  = 0.0;                  // for exchange only
+    double prev_mean_consensus_time = 0.0;                  // for exchange only
 
-    size_t nrounds = 0;
+    size_t nrounds                  = 0;
 
     for (int trial = 0; trial < ntrials; trial++)           // number of trials
     {
+        double cur_callback_time        = 0.0;              // for exchange only
+        double cur_comm_time            = 0.0;              // for exchange only
+        double cur_consensus_time       = 0.0;              // for exchange only
+
         // reset the block particle traces, but leave the vector field intact
         master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
                 {
@@ -482,6 +495,7 @@ int main(int argc, char **argv)
 
 #if IEXCHANGE == 1
 
+        // combined advection and exchange
         master.iexchange([&](Block* b, const diy::Master::ProxyWithLink& icp) -> bool
                 {
                     bool val = trace_block_iexchange(b,
@@ -502,11 +516,13 @@ int main(int argc, char **argv)
         int stop = (max_rounds ? max_rounds : 1);
         int incr = (max_rounds ? 1 : 0);
 
-        int nrounds = 0;
+        nrounds = 0;
         for (int round = 0; round < stop; round += incr)
         {
             nrounds++;
 
+            // advection
+            double t0 = MPI_Wtime();
             master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
                     {
                         trace_block_exchange(b,
@@ -516,16 +532,25 @@ int main(int argc, char **argv)
                                              max_steps,
                                              seed_rate,
                                              share_face,
-                                             synth);
+                                             synth,
+                                             cur_consensus_time);
                     });
-            master.exchange();
+            cur_callback_time += (MPI_Wtime() - t0);
 
+            // exchange
+            t0 = MPI_Wtime();
+            master.exchange();
+            cur_comm_time += (MPI_Wtime() - t0);
+
+            // determine if all particles are done
+            t0 = MPI_Wtime();
             int init, done;
             for (int i = 0; i < master.size(); i++)
             {
                 init = master.proxy(i).get<int>();
                 done = master.proxy(i).get<int>();
             }
+            cur_consensus_time += (MPI_Wtime() - t0);
 
             if (init == done && done != 0)
                 break;
@@ -566,30 +591,42 @@ int main(int argc, char **argv)
         // originally B.P. Welford, Technometrics, 4,(1962), 419-420
         if (trial == 0)
         {
-            cur_mean_time   = cur_time;
-            prev_mean_time  = cur_time;
-            cur_mean_ncalls = cur_ncalls;
-            prev_mean_ncalls= cur_ncalls;
-            cur_std_time    = 0.0;
-            cur_std_ncalls  = 0.0;
+            cur_mean_time               = cur_time;
+            prev_mean_time              = cur_time;
+            cur_mean_ncalls             = cur_ncalls;
+            prev_mean_ncalls            = cur_ncalls;
+            cur_mean_callback_time      = cur_callback_time;
+            prev_mean_callback_time     = cur_callback_time;
+            cur_mean_comm_time          = cur_comm_time;
+            prev_mean_comm_time         = cur_comm_time;
+            cur_mean_consensus_time     = cur_consensus_time;
+            prev_mean_consensus_time    = cur_consensus_time;
+            cur_std_time                = 0.0;
+            cur_std_ncalls              = 0.0;
         }
         else
         {
-            cur_mean_time   = prev_mean_time   + (cur_time   - prev_mean_time)   / (trial + 1);
-            cur_mean_ncalls = prev_mean_ncalls + (cur_ncalls - prev_mean_ncalls) / (trial + 1);
-            cur_std_time    = prev_std_time    + (cur_time   - prev_mean_time)   * (cur_time   - cur_mean_time);
-            cur_std_ncalls  = prev_std_ncalls  + (cur_ncalls - prev_mean_ncalls) * (cur_ncalls - cur_mean_ncalls);
+            cur_mean_time           = prev_mean_time            + (cur_time             - prev_mean_time)           / (trial + 1);
+            cur_mean_ncalls         = prev_mean_ncalls          + (cur_ncalls           - prev_mean_ncalls)         / (trial + 1);
+            cur_mean_callback_time  = prev_mean_callback_time   + (cur_callback_time    - prev_mean_callback_time)  / (trial + 1);
+            cur_mean_comm_time      = prev_mean_comm_time       + (cur_comm_time        - prev_mean_comm_time)      / (trial + 1);
+            cur_mean_consensus_time = prev_mean_consensus_time  + (cur_consensus_time   - prev_mean_consensus_time) / (trial + 1);
+            cur_std_time            = prev_std_time             + (cur_time   - prev_mean_time)   * (cur_time   - cur_mean_time);
+            cur_std_ncalls          = prev_std_ncalls           + (cur_ncalls - prev_mean_ncalls) * (cur_ncalls - cur_mean_ncalls);
         }
-        prev_mean_time      = cur_mean_time;
-        prev_mean_ncalls    = cur_mean_ncalls;
-        prev_std_time       = cur_std_time;
-        prev_std_ncalls     = cur_std_ncalls;
+        prev_mean_time              = cur_mean_time;
+        prev_mean_ncalls            = cur_mean_ncalls;
+        prev_mean_callback_time     = cur_mean_callback_time;
+        prev_mean_comm_time         = cur_mean_comm_time;
+        prev_mean_consensus_time    = cur_mean_consensus_time;
+        prev_std_time               = cur_std_time;
+        prev_std_ncalls             = cur_std_ncalls;
 
         // debug
         if (world.rank() == 0)
         {
-            fmt::print(stderr, "trial {} time {} nrounds {} ncalls {}\n",
-                    trial, cur_time, nrounds, cur_ncalls);
+            fmt::print(stderr, "trial {} time {} callback time {} comm time {} consensus time {} nrounds {} ncalls {}\n",
+                    trial, cur_time, cur_callback_time, cur_comm_time, cur_consensus_time, nrounds, cur_ncalls);
         }
 
         // merge-reduce traces to one block
@@ -633,22 +670,25 @@ int main(int argc, char **argv)
         fmt::print(stderr, "---------- stats ----------\n");
 #if IEXCHANGE == 1
         fmt::print(stderr, "using iexchange\n");
-        fmt::print(stderr, "min queue size (bytes):\t{}\n",     min_queue_size);
-        fmt::print(stderr, "max hold time (micro s):\t{}\n",    max_hold_time);
+        fmt::print(stderr, "min queue size (bytes):\t\t{}\n",           min_queue_size);
+        fmt::print(stderr, "max hold time (micro s):\t\t{}\n",          max_hold_time);
 #else
         fmt::print(stderr, "using exchange\n");
 #endif
-        fmt::print(stderr, "seed rate:\t\t\t{}\n",              seed_rate);
-        fmt::print(stderr, "nprocs:\t\t\t{}\n",                 world.size());
-        fmt::print(stderr, "nblocks:\t\t\t{}\n",                nblocks);
-        fmt::print(stderr, "ntrials:\t\t\t{}\n",                ntrials);
-        fmt::print(stderr, "mean time (s):\t\t{}\n",            cur_mean_time);
-        fmt::print(stderr, "std dev time (s):\t\t{}\n",         ntrials > 1 ? sqrt(cur_std_time / (ntrials - 1)) : 0.0);
+        fmt::print(stderr, "seed rate:\t\t\t\t{}\n",                    seed_rate);
+        fmt::print(stderr, "nprocs:\t\t\t\t{}\n",                       world.size());
+        fmt::print(stderr, "nblocks:\t\t\t\t{}\n",                      nblocks);
+        fmt::print(stderr, "ntrials:\t\t\t\t{}\n",                      ntrials);
+        fmt::print(stderr, "mean time (s):\t\t\t{}\n",                  cur_mean_time);
+        fmt::print(stderr, "std dev time (s):\t\t\t{}\n",               ntrials > 1 ? sqrt(cur_std_time / (ntrials - 1)) : 0.0);
 #if IEXCHANGE == 1
-        fprintf(stderr, "mean # callbacks:\t\t%.0lf\n",         cur_mean_ncalls);
-        fprintf(stderr, "std dev # callbacks:\t%.0lf\n",        ntrials > 1 ? sqrt(cur_std_ncalls / (ntrials - 1)) : 0.0);
+        fprintf(stderr,    "mean # callbacks:\t\t\t%.0lf\n",            cur_mean_ncalls);
+        fprintf(stderr,    "std dev # callbacks:\t\t%.0lf\n",           ntrials > 1 ? sqrt(cur_std_ncalls / (ntrials - 1)) : 0.0);
 #else
-        fmt::print(stderr, "# rounds:\t\t\t{}\n",               nrounds);
+        fmt::print(stderr, "# rounds:\t\t\t\t{}\n",                     nrounds);
+        fmt::print(stderr, "mean callback (advect) time (s):\t{}\n",    cur_mean_callback_time);
+        fmt::print(stderr, "mean comm time (s):\t\t\t{}\n",             cur_mean_comm_time);
+        fmt::print(stderr, "mean consensus time (s):\t\t{}\n",          cur_mean_consensus_time);
 #endif
 
         char infile[256];           // profile file name
