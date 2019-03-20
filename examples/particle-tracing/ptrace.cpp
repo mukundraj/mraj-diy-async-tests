@@ -284,8 +284,10 @@ void trace_block_exchange(Block*                              b,
 
     // stage all_reduce of total initialized and total finished particle traces
     double t0 = MPI_Wtime();
-    cp.all_reduce(b->init, plus<int>());
-    cp.all_reduce(b->done, plus<int>());
+    // DEPRECATE
+//     cp.all_reduce(b->init, plus<int>());
+//     cp.all_reduce(b->done, plus<int>());
+    cp.all_reduce(b->particles.size(), plus<size_t>());
     cur_consensus_time += (MPI_Wtime() - t0);
 }
 
@@ -539,15 +541,27 @@ int main(int argc, char **argv)
 
             // determine if all particles are done
             t0 = MPI_Wtime();
-            int init, done;
+            // DEPRECATE
+//             int init, done;
+            size_t remaining;
             for (int i = 0; i < master.size(); i++)
             {
-                init = master.proxy(i).get<int>();
-                done = master.proxy(i).get<int>();
+                // DEPRECATE
+//                 init = master.proxy(i).get<int>();
+//                 done = master.proxy(i).get<int>();
+                remaining = master.proxy(i).get<size_t>();
             }
             cur_consensus_time += (MPI_Wtime() - t0);
 
-            if (init == done && done != 0)
+            // debug
+            if (world.rank() == 0)
+                // DEPRECATE
+//                 fmt::print(stderr, "nrounds={} init={} done={}\n", nrounds, init, done);
+                fmt::print(stderr, "nrounds={} remaining={}\n", nrounds, remaining);
+
+            // DEPRECATE
+//             if (init == done && done != 0)
+            if (remaining == 0)
                 break;
         }
 
