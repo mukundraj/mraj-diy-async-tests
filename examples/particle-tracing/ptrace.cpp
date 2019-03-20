@@ -103,10 +103,6 @@ void InitSeeds(Block*                       b,
                 // don't duplicate points on block boundaries
                 if (share_face[2] && i < decomposer.domain.max[2] && k == l->core().max[2])
                     continue;
-                //                    Pt p;
-                //                    p.coords[0] = i;  p.coords[1] = j;  p.coords[2] = k;
-                //                    b->points->InsertNextPoint(p.coords);
-
                 EndPt p;
                 p.pid = b->init;
                 p.sid = b->init;
@@ -114,12 +110,12 @@ void InitSeeds(Block*                       b,
                 particles.push_back(p);
 
                 b->init++; // needed for both
-
             }
         }
     }
 }
 
+// common to both exchange and iexchange
 void trace_particles(Block*                             b,
                      vector<EndPt>                      particles,
                      const diy::Master::ProxyWithLink&  cp,
@@ -192,26 +188,57 @@ void trace_particles(Block*                             b,
     }
 }
 
-#if IEXCHANGE == 0                        // callback for synchronous exchange version
-
-void trace_block_exchange(Block*                              b,
-                          const diy::Master::ProxyWithLink&   cp,
-                          const Decomposer&                   decomposer,
-                          const diy::Assigner&                assigner,
-                          const int                           max_steps,
-                          const int                           seed_rate,
-                          const Decomposer::BoolVector        share_face,
-                          bool                                synth,
-                          double                              cur_consensus_time)
+void deq_incoming_exchange(Block*                               b,
+                           const diy::Master::ProxyWithLink&    cp)
 {
-    const int rank              = cp.master()->communicator().rank();
+    vector<int> in;
+    cp.incoming(in);
+    for (int i = 0; i < in.size(); i++)
+    {
+        if (cp.incoming(in[i]).buffer.size() > 0)
+        {
+            vector<EndPt> incoming_endpts;
+            cp.dequeue(in[i], incoming_endpts);
+            for (size_t j = 0; j < incoming_endpts.size(); j++)
+            {
+                incoming_endpts[j].sid++;
+                b->particles.push_back(incoming_endpts[j]);
+            }
+        }
+    }
+}
+
+void deq_incoming_iexchange(Block*                              b,
+                            const diy::Master::ProxyWithLink&   cp)
+{
+    diy::RegularLink<Bounds> *l = static_cast<diy::RegularLink<Bounds>*>(cp.link());
+    for (size_t i = 0; i < l->size(); ++i)
+    {
+        int nbr_gid = l->target(i).gid;
+        while (cp.incoming(nbr_gid))
+        {
+            EndPt incoming_endpt;
+            cp.dequeue(nbr_gid, incoming_endpt);
+            b->particles.push_back(incoming_endpt);
+        }
+    }
+}
+
+// commone to both exchange and iexchange
+void trace_block(Block*                              b,
+                 const diy::Master::ProxyWithLink&   cp,
+                 const Decomposer&                   decomposer,
+                 const diy::Assigner&                assigner,
+                 const int                           max_steps,
+                 const int                           seed_rate,
+                 const Decomposer::BoolVector        share_face,
+                 bool                                synth,
+                 map<diy::BlockID, vector<EndPt>>&   outgoing_endpts,
+                 bool                                iexchange)
+{
     const int gid               = cp.gid();
     diy::RegularLink<Bounds> *l = static_cast<diy::RegularLink<Bounds>*>(cp.link());
-    map<diy::BlockID, vector<Pt> > outgoing_pts;
-
-    vector<EndPt>& particles = b->particles;
-    particles.clear();
-    map<diy::BlockID, vector<EndPt> > outgoing_endpts;
+    b->particles.clear();
 
     const int   st[3]   = {l->core().min[0],
                            l->core().min[1],
@@ -224,28 +251,32 @@ void trace_block_exchange(Block*                              b,
     if (b->init == 0)
     {
         int sr = (seed_rate < 1 ? 1 : seed_rate);
-        InitSeeds(b, gid, decomposer, share_face, l, sr, st, sz, synth, particles);
+        InitSeeds(b, gid, decomposer, share_face, l, sr, st, sz, synth, b->particles);
     }
 
-    // dequeue vectors of endpoints, add to seed particles
-    vector<int> in;
-    cp.incoming(in);
-    for (int i = 0; i < in.size(); i++)
-    {
-        if (cp.incoming(in[i]).buffer.size() > 0)
-        {
-            vector<EndPt> incoming_endpts;
-            cp.dequeue(in[i], incoming_endpts);
-            for (size_t j = 0; j < incoming_endpts.size(); j++)
-            {
-                incoming_endpts[j].sid++;
-                particles.push_back(incoming_endpts[j]);
-            }
-        }
-    }
+    // dequeue incoming points
+    if (iexchange)
+        deq_incoming_iexchange(b, cp);
+    else
+        deq_incoming_exchange(b, cp);
 
     // trace particles
-    trace_particles(b, particles, cp, decomposer, max_steps, outgoing_endpts, false);
+    trace_particles(b, b->particles, cp, decomposer, max_steps, outgoing_endpts, iexchange);
+}
+
+void trace_block_exchange(Block*                              b,
+                          const diy::Master::ProxyWithLink&   cp,
+                          const Decomposer&                   decomposer,
+                          const diy::Assigner&                assigner,
+                          const int                           max_steps,
+                          const int                           seed_rate,
+                          const Decomposer::BoolVector        share_face,
+                          bool                                synth,
+                          double                              cur_consensus_time)
+{
+    map<diy::BlockID, vector<EndPt> > outgoing_endpts;
+
+    trace_block(b, cp, decomposer, assigner, max_steps, seed_rate, share_face, synth, outgoing_endpts, false);
 
     // enqueue the vectors of endpoints
     for (map<diy::BlockID, vector<EndPt> >::const_iterator it = outgoing_endpts.begin(); it != outgoing_endpts.end(); it++)
@@ -258,10 +289,6 @@ void trace_block_exchange(Block*                              b,
     cur_consensus_time += (MPI_Wtime() - t0);
 }
 
-#endif
-
-#if IEXCHANGE == 1                                // callback for asynchronous iexchange version
-
 bool trace_block_iexchange(Block*                               b,
                            const diy::Master::ProxyWithLink&    cp,
                            const Decomposer&                    decomposer,
@@ -272,46 +299,12 @@ bool trace_block_iexchange(Block*                               b,
                            int                                  synth)
 {
     counter++;
-    const int gid               = cp.gid();
-    diy::RegularLink<Bounds> *l = static_cast<diy::RegularLink<Bounds>*>(cp.link());
-
-    vector<EndPt>& particles = b->particles;
-    particles.clear();
     map<diy::BlockID, vector<EndPt> > outgoing_endpts;  // needed to call trace_particles() but otherwise unused in iexchange
 
-    const int   st[3]   = {l->core().min[0],
-                           l->core().min[1],
-                           l->core().min[2]};
-    const int   sz[3]   = {l->core().max[0] - l->core().min[0] + 1,
-                           l->core().max[1] - l->core().min[1] + 1,
-                           l->core().max[2] - l->core().min[2] + 1};
-
-    // initialize seed particles first time
-    if (b->init == 0)
-    {
-        int sr = (seed_rate < 1 ? 1 : seed_rate);
-        InitSeeds(b, gid, decomposer, share_face, l, sr, st, sz, synth, particles);
-    }
-
-    // get incoming points
-    for (size_t i = 0; i < l->size(); ++i)
-    {
-        int nbr_gid = l->target(i).gid;
-        while (cp.incoming(nbr_gid))
-        {
-            EndPt incoming_endpt;
-            cp.dequeue(nbr_gid, incoming_endpt);
-            particles.push_back(incoming_endpt);
-        }
-    }
-
-    // trace particles
-    trace_particles(b, particles, cp, decomposer, max_steps, outgoing_endpts, true);
+    trace_block(b, cp, decomposer, assigner, max_steps, seed_rate, share_face, synth, outgoing_endpts, true);
 
     return true;
 }
-
-#endif
 
 // merge traces at the root block
 void merge_traces(void* b_, const diy::ReduceProxy& rp, const diy::RegularMergePartners&)
@@ -476,6 +469,7 @@ int main(int argc, char **argv)
 
     size_t nrounds                  = 0;
 
+    // run the trials
     for (int trial = 0; trial < ntrials; trial++)           // number of trials
     {
         double cur_callback_time        = 0.0;              // for exchange only
@@ -557,6 +551,7 @@ int main(int argc, char **argv)
                 break;
         }
 
+        // debug: exceeded number of rounds for exchange
         if (nrounds == max_rounds)
         {
             if (world.rank() == 0)
