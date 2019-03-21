@@ -480,8 +480,8 @@ int main(int argc, char **argv)
                 {
                     b->init     = 0;
                     b->done     = 0;
-                    b->nvecs    = 0;
                     b->segments.clear();
+                    b->particles.clear();
                 });
 
         MPI_Barrier(world);
