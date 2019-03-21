@@ -62,7 +62,7 @@ struct Block
         if (nvecs)
         {
             for (int i = 0; i < 3; i++)
-                delete vel[i];
+                delete[] vel[i];
         }
     }
 
