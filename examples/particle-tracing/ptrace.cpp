@@ -86,6 +86,10 @@ void InitSeeds(Block*                       b,
     if (synth && coords[0])
         return;
 
+    // debug
+//     if (synth)
+//         fmt::print(stderr, "gid{} is seeded\n", gid);
+
     // for synthetic data, seed only -x side of the block
     int end = synth ? st[0] + 1: st[0] + sz[0];
     for (int i = st[0]; i < end; i += sr)
@@ -179,6 +183,10 @@ void trace_particles(Block*                             b,
             if (dests.size())
             {
                 diy::BlockID bid = l->target(dests[0]); // in case of multiple dests, send to first dest only
+
+                // debug
+//                 fmt::print(stderr, "gid {} enq to gid {}\n", cp.gid(), bid.gid);
+
                 if (iexchange)                          // enqueuing single endpoint allows fine-grain iexchange if desired
                     cp.enqueue(bid, out_pt);
                 else

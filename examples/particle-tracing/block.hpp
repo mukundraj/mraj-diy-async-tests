@@ -412,30 +412,42 @@ struct AddSynthetic1 : public AddBlock
         b->vel[2] = new float[b->nvecs];
 
         // set synthetic velocity vectors
-        // most blocks have a fast +x velocity
-        // blocks along the diagonal in the decomposition have a slow +x velocity
+        // half the blocks have a fast +x velocity, half slow
+        // slow/fast switch at center of domain in x and y coordinate
         std::vector<int> coords;                            // coordinates of block in each dimension
         decomposer.gid_to_coords(gid, coords);
         vector<int> divs(coords.size());                    // number of blocks in each dimension
         decomposer.fill_divisions(divs);
 
-        bool diagonal = true;
-        for (int i = 0; i < coords.size(); i++)
+        // debug
+//         fmt::print(stderr, "gid {} coords: [ ", gid);
+//         for (int i = 0; i < coords.size(); i++)
+//             fmt::print(stderr, "{} ", coords[i]);
+//         fmt::print(stderr, "] ");
+//         fmt::print(stderr, "divs: [ ");
+//         for (int i = 0; i < divs.size(); i++)
+//             fmt::print(stderr, "{} ", divs[i]);
+//         fmt::print(stderr, "]\n");
+
+        bool slow_block = false;
+        if (coords.size() >= 2)
         {
-            if (divs[i] == 1)
-                continue;
-            if (i > 0 && coords[i] != coords[i - 1])
-            {
-                diagonal =  false;
-                break;
-            }
+            if ((coords[0] <  divs[0] / 2 && coords[1] <  divs[1] / 2) ||
+                (coords[0] >= divs[0] / 2 && coords[1] >= divs[1] / 2))
+                slow_block = true;
+            else
+                slow_block = false;
         }
+
+        // debug
+//         if (slow_block)
+//             fmt::print(stderr, "gid {} is slow\n", gid);
 
         for (size_t i = 0; i < b->nvecs; i++)
         {
-            if (diagonal)                           // slow block
+            if (slow_block)
                 b->vel[0][i] = slow_vel;
-            else                                    // fast block
+            else
                 b->vel[0][i] = fast_vel;
             b->vel[1][i] = 0.0;
             b->vel[2][i] = 0.0;
