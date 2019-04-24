@@ -57,7 +57,7 @@ extern "C" {
                       float *Y = NULL)       // result returned here if not NULL, otherwise in X
     {
         // debug: intentionally slow down
-        usleep(100);
+//         usleep(100);
 
         if (!inside(3, gst, gsz, X)) return false;
 
