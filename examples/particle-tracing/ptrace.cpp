@@ -80,7 +80,7 @@ void InitSeeds(Block*                       b,
                int                          synth,
                vector<EndPt>&               particles)
 {
-    // for synthetic data, see only blocks at -x side of domain, and skip others
+    // for synthetic data, seed only blocks at -x side of domain, and skip others
     std::vector<int> coords;
     decomposer.gid_to_coords(gid, coords);
     if (synth && coords[0])
@@ -167,6 +167,9 @@ void trace_particles(Block*                             b,
         }
         b->segments.push_back(s);
 
+        // debug
+//         fmt::print(stderr, "gid {} particle {} has {} steps\n", cp.gid(), i, particles[i].nsteps);
+
         if (!inside(next_p, decomposer.domain))
             finished = true;
 
@@ -232,7 +235,7 @@ void deq_incoming_iexchange(Block*                              b,
     }
 }
 
-// commone to both exchange and iexchange
+// common to both exchange and iexchange
 void trace_block(Block*                              b,
                  const diy::Master::ProxyWithLink&   cp,
                  const Decomposer&                   decomposer,
@@ -371,6 +374,7 @@ int main(int argc, char **argv)
     int synth               = 0;                // generate various synthetic input datasets
     float slow_vel          = 1.0;              // slow velocity for synthetic data
     float fast_vel          = 10.0;             // fast velocity for synthetic data
+    int nslow               = 2;                // number of slow regions per dimension for synthetic data
     int check               = 0;                // write out traces for checking
     std::string log_level   = "info";           // logging level
     int ntrials             = 1;                // number of trials
@@ -388,6 +392,7 @@ int main(int argc, char **argv)
         >> Option('o', "max-hold-time", max_hold_time,  "Maximum queue hold time (ms) for iexchange")
         >> Option('x', "synthetic",     synth,          "Generate various synthetic flows")
         >> Option('w', "slow-vel",      slow_vel,       "Slow velocity for synthetic data")
+        >> Option('v', "nslow",         nslow,          "Number of slow velocity regions per dimension for synthetic data")
         >> Option('f', "fast-vel",      fast_vel,       "Fast velocity for synthetic data")
         >> Option('c', "check",         check,          "Write out traces for checking")
         >> Option('l', "log",           log_level,      "log level")
@@ -435,7 +440,7 @@ int main(int argc, char **argv)
 
     if (synth == 1)
     {
-        AddSynthetic1 addsynth(master, slow_vel, fast_vel, decomposer);
+        AddSynthetic1 addsynth(master, slow_vel, fast_vel, nslow, decomposer);
         decomposer.decompose(world.rank(), assigner, addsynth);
     }
     else if (synth == 2)
@@ -521,6 +526,9 @@ int main(int argc, char **argv)
         nrounds = 0;
         for (int round = 0; round < stop; round += incr)
         {
+            // debug
+//             fmt::print(stderr, "round {}\n", nrounds);
+
             nrounds++;
 
             // advection
@@ -550,10 +558,6 @@ int main(int argc, char **argv)
             for (int i = 0; i < master.size(); i++)
                 remaining = master.proxy(i).get<size_t>();
             cur_consensus_time += (MPI_Wtime() - t0);
-
-            // debug
-//             if (world.rank() == 0)
-//                 fmt::print(stderr, "nrounds={} remaining={}\n", nrounds, remaining);
 
             if (remaining == 0)
                 break;
@@ -667,6 +671,10 @@ int main(int argc, char **argv)
     }           // number of trials
 
     // print stats
+
+    // debug
+    fmt::print(stderr, "rank {} mean callback (advect) time (s):\t{}\n",    world.rank(), cur_mean_callback_time);
+
     if (world.rank() == 0)
     {
         // ncalls: number of calls in case of IEXCHANGE

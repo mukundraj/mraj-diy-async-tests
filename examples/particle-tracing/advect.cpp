@@ -18,6 +18,8 @@
 #include <cstdlib>
 #include <cassert>
 
+#include    <unistd.h>      // for debugging, adding sleep
+
 extern "C" {
 
     bool trace_3D_brown(const int *st,
@@ -54,6 +56,9 @@ extern "C" {
                       float h,
                       float *Y = NULL)       // result returned here if not NULL, otherwise in X
     {
+        // debug: intentionally slow down
+        usleep(100);
+
         if (!inside(3, gst, gsz, X)) return false;
 
         float v[3];

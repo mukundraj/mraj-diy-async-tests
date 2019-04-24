@@ -381,17 +381,43 @@ struct AddAndRead : public AddBlock
     int hdr_bytes;
 };
 
+// convert linear domain point index into (i,j,k,...) multidimensional index
+// number of dimensions is the domain dimensionality
+void idx2ijk(
+        size_t                  idx,                // linear cell indx
+        const vector<size_t>&   ds,                 // stride of input points
+        const Bounds&           bounds,             // block bounds
+        vector<size_t>&         ijk)                // i,j,k,... indices in all dimensions
+{
+    int dim = ds.size();
+    if (dim == 1)
+    {
+        ijk[0] = idx;
+        return;
+    }
+
+    for (auto i = 0; i < dim; i++)
+    {
+        if (i < dim - 1)
+            ijk[i] = bounds.min[i] + (idx % ds[i + 1]) / ds[i];
+        else
+            ijk[i] = bounds.min[i] + idx / ds[i];
+    }
+}
+
 // add a block to the master and set synthetic vector field
 // block along diagonal of block coords is slower than the rest
 struct AddSynthetic1 : public AddBlock
 {
     AddSynthetic1(diy::Master&           m,
-                 const float             slow_vel_,
-                 const float             fast_vel_,
+                 const float             slow_vel_,         // slow velocity
+                 const float             fast_vel_,         // fast velocity
+                 const int               nslow_,            // number of slow regions per dimension
                  const Decomposer&       decomposer_) :
         AddBlock(m),
         slow_vel(slow_vel_),
         fast_vel(fast_vel_),
+        nslow(nslow_),
         decomposer(decomposer_) {}
 
     void operator()(int gid,
@@ -412,8 +438,6 @@ struct AddSynthetic1 : public AddBlock
         b->vel[2] = new float[b->nvecs];
 
         // set synthetic velocity vectors
-        // half the blocks have a fast +x velocity, half slow
-        // slow/fast switch at center of domain in x and y coordinate
         std::vector<int> coords;                            // coordinates of block in each dimension
         decomposer.gid_to_coords(gid, coords);
         vector<int> divs(coords.size());                    // number of blocks in each dimension
@@ -429,20 +453,32 @@ struct AddSynthetic1 : public AddBlock
 //             fmt::print(stderr, "{} ", divs[i]);
 //         fmt::print(stderr, "]\n");
 
-        bool slow_block = false;
-        if (coords.size() >= 2)
+        // one slow diy block along diagonal
+        bool slow_block = true;
+        for (int i = 0; i < coords.size(); i++)
         {
-            if ((coords[0] <  divs[0] / 2 && coords[1] <  divs[1] / 2) ||
-                (coords[0] >= divs[0] / 2 && coords[1] >= divs[1] / 2))
-                slow_block = true;
-            else
-                slow_block = false;
+            if (divs[i] == 1)
+                continue;
+            if (i > 0 && coords[i] != coords[i - 1])
+            {
+                slow_block =  false;
+                break;
+            }
         }
 
-        // debug
-//         if (slow_block)
-//             fmt::print(stderr, "gid {} is slow\n", gid);
+        // half of each row is slow blocks
+        // DEPRECATE
+//         bool slow_block = false;
+//         if (coords.size() >= 2)
+//         {
+//             if ((coords[0] <  divs[0] / 2 && coords[1] <  divs[1] / 2) ||
+//                 (coords[0] >= divs[0] / 2 && coords[1] >= divs[1] / 2))
+//                 slow_block = true;
+//             else
+//                 slow_block = false;
+//         }
 
+        // set the velocity
         for (size_t i = 0; i < b->nvecs; i++)
         {
             if (slow_block)
@@ -452,10 +488,51 @@ struct AddSynthetic1 : public AddBlock
             b->vel[1][i] = 0.0;
             b->vel[2][i] = 0.0;
         }
+
+        // diagonal slow-fast regions independent of blocks
+        // DEPRECATE
+//         int dim = domain.min.size();
+//         vector<size_t> ijk(dim);            // coordinates of input point in global domain
+//         vector<size_t> ds(dim, 1);          // stride for input points in each dimension
+//         for (auto i = 1; i < dim; i++)
+//             ds[i] = ds[i - 1] * (bounds.max[i - 1] - bounds.min[i - 1] + 1);
+// 
+//         vector<size_t> slow_size(dim);      // size of slow block
+//         for (auto i = 0; i < dim; i++)
+//             slow_size[i] = (domain.max[i] - domain.min[i] + 1) / nslow;
+// 
+//         for (size_t i = 0; i < b->nvecs; i++)
+//         {
+//             idx2ijk(i, ds, bounds, ijk);        // global coords of the input point
+// 
+//             // check all slow blocks to see if the point is inside
+//             bool slow;
+//             for (auto j = 0; j < nslow; j++)
+//             {
+//                 slow = true;
+//                 for (auto k = 0; k < dim; k++)
+//                     if (ijk[k] < j * slow_size[k] || ijk[k] >= (j + 1) * slow_size[k])
+//                     {
+//                         slow = false;
+//                         break;
+//                     }
+//                 if (slow)
+//                     break;
+//             }
+// 
+//             // set the velocity
+//             if (slow)
+//                 b->vel[0][i] = slow_vel;
+//             else
+//                 b->vel[0][i] = fast_vel;
+//             b->vel[1][i] = 0.0;
+//             b->vel[2][i] = 0.0;
+//         }
     }
 
     Decomposer  decomposer;
     float       slow_vel, fast_vel;
+    int         nslow;
 };
 
 // add a block to the master and set synthetic vector field
