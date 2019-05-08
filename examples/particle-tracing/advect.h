@@ -16,6 +16,7 @@
 #define _ADVECT_H
 
 #include <stdbool.h>
+#include <functional>
 
 #ifdef __cplusplus
 extern "C" {
@@ -45,6 +46,16 @@ extern "C" {
                         float       *X,
                         float        h,
                         float       *Y);
+
+
+    bool advect_rk4(const int *gst,
+                const int *gsz,
+                const int *st,
+                const int *sz,
+                const float **vec,
+                float *pt,
+                float h,
+                float* Y );
 
 #ifdef __cplusplus
 }

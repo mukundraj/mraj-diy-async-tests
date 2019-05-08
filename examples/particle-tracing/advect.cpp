@@ -115,3 +115,51 @@ extern "C" {
     }
 
 }
+
+
+
+bool advect_rk4(const int *gst,
+                const int *gsz,
+                const int *st,
+                const int *sz,
+                const float **vec,
+                float *pt,
+                float h,
+                float* Y )
+{
+  int num_dims = 3;
+
+  float p0[num_dims]; 
+  memcpy(p0, pt, sizeof(float)*num_dims); 
+  
+  float v[num_dims]; 
+
+  // 1st rk step
+  if (!lerp3D(pt, gst, gsz, 3, vec, v)) return false; 
+  float k1[num_dims]; 
+  for (int i=0; i<num_dims; i++) k1[i] = h*v[i]; 
+  for (int i=0; i<num_dims; i++) pt[i] = p0[i] + 0.5*k1[i]; 
+  
+  // 2nd rk step
+  if (!lerp3D(pt, gst, gsz, 3, vec, v)) return true; 
+  float k2[num_dims]; 
+  for (int i=0; i<num_dims; i++) k2[i] = h*v[i]; 
+  for (int i=0; i<num_dims; i++) pt[i] = p0[i] + 0.5*k2[i]; 
+
+  // 3rd rk step
+  if (!lerp3D(pt, gst, gsz, 3, vec, v)) return true; 
+  float k3[num_dims]; 
+  for (int i=0; i<num_dims; i++) k3[i] = h*v[i]; 
+  for (int i=0; i<num_dims; i++) pt[i] = p0[i] + k3[i]; 
+
+  // 4th rk step
+  if (!lerp3D(pt, gst, gsz, 3, vec, v)) return true; 
+  for (int i=0; i<num_dims; i++) 
+    Y[i] = p0[i] + (k1[i] + 2.0*(k2[i]+k3[i]) + h*v[i])/6.0; 
+
+  return true; 
+}
+
+
+
+

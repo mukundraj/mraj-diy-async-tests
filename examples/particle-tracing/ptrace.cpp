@@ -154,7 +154,8 @@ void trace_particles(Block*                             b,
         bool    finished = false;
 
         // trace this segment as far as it will go in the local vector field
-        while (trace_3D_rk1(gst, gsz, st, sz, vec, cur_p.coords.data(), 0.5, next_p.coords.data()))
+        // while (trace_3D_rk1(gst, gsz, st, sz, vec, cur_p.coords.data(), 0.5, next_p.coords.data()))
+        while (advect_rk4(gst, gsz, st, sz, vec, cur_p.coords.data(), 0.5, next_p.coords.data()))
         {
             particles[i].nsteps++;
             s.pts.push_back(next_p);
