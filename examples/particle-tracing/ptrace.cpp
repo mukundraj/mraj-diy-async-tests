@@ -50,6 +50,7 @@
 #include "block.hpp"
 
 #include "advect.h"
+#include "lerp.hpp"
 
 #include <fstream>
 #include <string.h>
@@ -91,18 +92,18 @@ void InitSeeds(Block*                       b,
 //         fmt::print(stderr, "gid{} is seeded\n", gid);
 
     // for synthetic data, seed only -x side of the block
-    int end = synth ? st[0] + 1: st[0] + sz[0];
-    for (float i = st[0]+sr/2; i < end; i += sr)
+    int end = synth ? st[0] + 2: st[0] + sz[0];
+    for (float i = st[0] + 1; i < end; i += sr)
     {
         // don't duplicate points on block boundaries
         if (share_face[0] && i < decomposer.domain.max[0] && i == l->core().max[0])
             continue;
-        for (float j = st[1]+sr/2; j < st[1] + sz[1]; j += sr)
+        for (float j = st[1] + 1; j < st[1] + sz[1]; j += sr)
         {
             // don't duplicate points on block boundaries
             if (share_face[1] && i < decomposer.domain.max[1] && j == l->core().max[1])
                 continue;
-            for (float k = st[2]+sr/2; k < st[2] + sz[2]; k += sr)
+            for (float k = st[2] + 1; k < st[2] + sz[2]; k += sr)
             {
                 // don't duplicate points on block boundaries
                 if (share_face[2] && i < decomposer.domain.max[2] && k == l->core().max[2])
@@ -117,6 +118,7 @@ void InitSeeds(Block*                       b,
             }
         }
     }
+    // fprintf(stderr, "b->init %d\n", b->init);
 }
 
 // common to both exchange and iexchange
@@ -156,31 +158,55 @@ void trace_particles(Block*                             b,
         // trace this segment as far as it will go in the local vector field
         // while (trace_3D_rk1(gst, gsz, st, sz, vec, cur_p.coords.data(), 0.5, next_p.coords.data()))
         while (advect_rk4(gst, gsz, st, sz, vec, cur_p.coords.data(), 0.5, next_p.coords.data()))
-        {
+        {   //fprintf(stderr,"size %d \n",particles[i].nsteps );
             particles[i].nsteps++;
             s.pts.push_back(next_p);
+            // if (cp.gid()==4 && particles[i].pid==0){
+            //   fprintf(stderr, "p0 %f %f, st0+sz0-1 %d, %d, gst %d, gsz %d\n", cur_p.coords[0], next_p.coords[0], st[0] + sz[0] - 1, inside(3, st, sz, cur_p.coords.data()), gst[0], gsz[0]);
+            // }
             cur_p = next_p;
             if (particles[i].nsteps >= max_steps)
             {
                 finished = true;
                 break;
             }
+
+
         }
         b->segments.push_back(s);
 
         // debug
 //         fmt::print(stderr, "gid {} particle {} has {} steps\n", cp.gid(), i, particles[i].nsteps);
 
+        // int flag = 0;
+        // if (cp.gid()==4){
+        //   flag = 1;
+        // }
+
         if (!inside(next_p, decomposer.domain))
             finished = true;
 
-        if (finished)                    // this segment is done
+        if (finished){                    // this segment is done
             b->done++;
+            // if (flag == 1 && particles[i].pid==0){
+            //   printf("done %d %d, %f %f %f, %d\n", b->done, particles[i].nsteps, cur_p.coords[0], cur_p.coords[1], cur_p.coords[2], particles[i].pid);
+            // }
+          }
         else                             // find destination of segment endpoint
-        {
+        {   
             vector<int> dests;
             vector<int>::iterator it = dests.begin();
             insert_iterator<vector<int> > insert_it(dests, it);
+            
+
+            // if (flag==1){
+
+            //         fprintf(stderr, "l->cores (%d %d) (%d %d) (%d %d) ,,,", l->core(0).min[0], l->core(0).max[0], l->core(0).min[1], l->core(0).max[1], l->core(0).min[2], l->core(0).max[2]);
+            // fprintf(stderr, "l->core (%d %d) (%d %d) (%d %d) ,,,", l->core(1).min[0], l->core(1).max[0], l->core(1).min[1], l->core(1).max[1], l->core(1).min[2], l->core(1).max[2]);
+            // fprintf(stderr, "l->core (%d %d) (%d %d) (%d %d) ,,, \n", l->core(2).min[0], l->core(2).max[0], l->core(2).min[1], l->core(2).max[1], l->core(2).min[2], l->core(2).max[2]);
+
+            // }
+
             diy::in(*l, next_p.coords, insert_it, decomposer.domain);
             EndPt out_pt(s);
             out_pt.nsteps = particles[i].nsteps;

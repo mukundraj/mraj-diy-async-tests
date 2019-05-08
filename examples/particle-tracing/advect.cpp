@@ -59,10 +59,10 @@ extern "C" {
         // debug: intentionally slow down
 //         usleep(100);
 
-        if (!inside(3, gst, gsz, X)) return false;
+        if (!inside(3, st, sz, X)) return false;
 
         float v[3];
-        if (!lerp3D(X, gst, gsz, 3, vec, v))
+        if (!lerp3D(X, st, sz, 3, vec, v))
             return false;
 
         if (Y)
@@ -135,27 +135,27 @@ bool advect_rk4(const int *gst,
   float v[num_dims]; 
 
   // 1st rk step
-  if (!lerp3D(pt, gst, gsz, 3, vec, v)) return false; 
+  if (!lerp3D(pt, st, sz, 3, vec, v)) return false; 
   float k1[num_dims]; 
   for (int i=0; i<num_dims; i++) k1[i] = h*v[i]; 
-  for (int i=0; i<num_dims; i++) pt[i] = p0[i] + 0.5*k1[i]; 
+  for (int i=0; i<num_dims; i++) Y[i] = p0[i] + 0.5*k1[i]; 
   
   // 2nd rk step
-  if (!lerp3D(pt, gst, gsz, 3, vec, v)) return true; 
+  if (!lerp3D(Y, st, sz, 3, vec, v)) return true; 
   float k2[num_dims]; 
   for (int i=0; i<num_dims; i++) k2[i] = h*v[i]; 
-  for (int i=0; i<num_dims; i++) pt[i] = p0[i] + 0.5*k2[i]; 
+  for (int i=0; i<num_dims; i++) Y[i] = Y[i] + 0.5*k2[i]; 
 
   // 3rd rk step
-  if (!lerp3D(pt, gst, gsz, 3, vec, v)) return true; 
+  if (!lerp3D(Y, st, sz, 3, vec, v)) return true; 
   float k3[num_dims]; 
   for (int i=0; i<num_dims; i++) k3[i] = h*v[i]; 
-  for (int i=0; i<num_dims; i++) pt[i] = p0[i] + k3[i]; 
+  for (int i=0; i<num_dims; i++) Y[i] = Y[i] + k3[i]; 
 
   // 4th rk step
-  if (!lerp3D(pt, gst, gsz, 3, vec, v)) return true; 
+  if (!lerp3D(Y, st, sz, 3, vec, v)) return true; 
   for (int i=0; i<num_dims; i++) 
-    Y[i] = p0[i] + (k1[i] + 2.0*(k2[i]+k3[i]) + h*v[i])/6.0; 
+    Y[i] = Y[i] + (k1[i] + 2.0*(k2[i]+k3[i]) + h*v[i])/6.0; 
 
   return true; 
 }

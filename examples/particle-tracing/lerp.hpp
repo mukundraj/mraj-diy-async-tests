@@ -71,6 +71,8 @@ inline bool inside(int         num_dims,
     return true;
 }
 
+
+
 inline float texel2D(const float* p,
                      const int* sz,
                      int x,
