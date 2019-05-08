@@ -57,7 +57,7 @@ template<class Point, class Bounds>
       for (int n = 0; n < link.size(); n++)
       {
         // wrap neighbor bounds, if necessary, otherwise bounds will be unchanged
-        neigh_bounds = link.bounds(n);
+        neigh_bounds = link.core(n);
         wrap_bounds(neigh_bounds, link.wrap(n), domain);
 
         if (utl::distance(neigh_bounds, p) == 0)

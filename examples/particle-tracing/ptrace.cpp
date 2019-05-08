@@ -51,6 +51,7 @@
 
 #include "advect.h"
 #include "lerp.hpp"
+#include "utils.hpp"
 
 #include <fstream>
 #include <string.h>
@@ -178,10 +179,10 @@ void trace_particles(Block*                             b,
         // debug
 //         fmt::print(stderr, "gid {} particle {} has {} steps\n", cp.gid(), i, particles[i].nsteps);
 
-        // int flag = 0;
-        // if (cp.gid()==4){
-        //   flag = 1;
-        // }
+        int flag = 0;
+        if (cp.gid()==3){
+          flag = 1;
+        }
 
         if (!inside(next_p, decomposer.domain))
             finished = true;
@@ -207,7 +208,9 @@ void trace_particles(Block*                             b,
 
             // }
 
-            diy::in(*l, next_p.coords, insert_it, decomposer.domain);
+            // diy::in(*l, next_p.coords, insert_it, decomposer.domain);
+            utl::in(*l, next_p.coords, insert_it, decomposer.domain, 0);
+
             EndPt out_pt(s);
             out_pt.nsteps = particles[i].nsteps;
             if (dests.size())
@@ -216,6 +219,9 @@ void trace_particles(Block*                             b,
 
                 // debug
 //                 fmt::print(stderr, "gid {} enq to gid {}\n", cp.gid(), bid.gid);
+
+                if (cp.gid() == 3 )
+                  fmt::print(stderr, " {} enq to gid {}, pid {}\n",cp.gid(), bid.gid, out_pt.pid);
 
                 if (iexchange)                          // enqueuing single endpoint allows fine-grain iexchange if desired
                     cp.enqueue(bid, out_pt);
