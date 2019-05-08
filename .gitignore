@@ -3,3 +3,4 @@ install*
 CMakeLists.txt.user
 .DS_Store
 *.swp
+sftp-config.json
