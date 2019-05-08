@@ -74,7 +74,7 @@ void InitSeeds(Block*                       b,
                const Decomposer&            decomposer,
                const Decomposer::BoolVector share_face,
                diy::RegularLink<Bounds>*    l,
-               const int                    sr,
+               const float                  sr,
                const int*                   st,
                const int*                   sz,
                int                          synth,
@@ -92,17 +92,17 @@ void InitSeeds(Block*                       b,
 
     // for synthetic data, seed only -x side of the block
     int end = synth ? st[0] + 1: st[0] + sz[0];
-    for (int i = st[0]; i < end; i += sr)
+    for (float i = st[0]+sr/2; i < end; i += sr)
     {
         // don't duplicate points on block boundaries
         if (share_face[0] && i < decomposer.domain.max[0] && i == l->core().max[0])
             continue;
-        for (int j = st[1]; j < st[1] + sz[1]; j += sr)
+        for (float j = st[1]+sr/2; j < st[1] + sz[1]; j += sr)
         {
             // don't duplicate points on block boundaries
             if (share_face[1] && i < decomposer.domain.max[1] && j == l->core().max[1])
                 continue;
-            for (int k = st[2]; k < st[2] + sz[2]; k += sr)
+            for (float k = st[2]+sr/2; k < st[2] + sz[2]; k += sr)
             {
                 // don't duplicate points on block boundaries
                 if (share_face[2] && i < decomposer.domain.max[2] && k == l->core().max[2])
@@ -242,7 +242,7 @@ void trace_block(Block*                              b,
                  const Decomposer&                   decomposer,
                  const diy::Assigner&                assigner,
                  const int                           max_steps,
-                 const int                           seed_rate,
+                 const float                         seed_rate,
                  const Decomposer::BoolVector        share_face,
                  bool                                synth,
                  map<diy::BlockID, vector<EndPt>>&   outgoing_endpts,
@@ -262,7 +262,8 @@ void trace_block(Block*                              b,
     // initialize seed particles first time
     if (b->init == 0)
     {
-        int sr = (seed_rate < 1 ? 1 : seed_rate);
+        // int sr = (seed_rate < 1 ? 1 : seed_rate);
+        float sr = seed_rate;
         InitSeeds(b, gid, decomposer, share_face, l, sr, st, sz, synth, b->particles);
     }
 
@@ -281,7 +282,7 @@ void trace_block_exchange(Block*                              b,
                           const Decomposer&                   decomposer,
                           const diy::Assigner&                assigner,
                           const int                           max_steps,
-                          const int                           seed_rate,
+                          const float                         seed_rate,
                           const Decomposer::BoolVector        share_face,
                           bool                                synth,
                           double                              cur_consensus_time)
@@ -305,7 +306,7 @@ bool trace_block_iexchange(Block*                               b,
                            const Decomposer&                    decomposer,
                            const diy::Assigner&                 assigner,
                            const int                            max_steps,
-                           const int                            seed_rate,
+                           const float                          seed_rate,
                            const Decomposer::BoolVector         share_face,
                            int                                  synth)
 {
@@ -354,7 +355,7 @@ int main(int argc, char **argv)
     string infile;                           // input file name
     Bounds domain {3};                       // global domain bounds
     int max_steps;                           // max number of steps a particle is allowed to take
-    int seed_rate;                           // seed particle every this many grid pts in each dim
+    float seed_rate;                           // seed particle every this many grid pts in each dim
 
     diy::mpi::environment  env(argc, argv);
     diy::mpi::communicator world;
@@ -413,7 +414,7 @@ int main(int argc, char **argv)
         }
         return 1;
     }
-//     diy::create_logger(log_level);
+//     diy::create_logger(log_level); 
     diy::FileStorage             storage(prefix);
     diy::Master                  master(world,
                                         nthreads,
