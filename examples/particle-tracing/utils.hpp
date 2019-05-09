@@ -46,13 +46,6 @@ template<class Point, class Bounds>
     {
       Bounds neigh_bounds {0}; // neighbor block bounds
 
-      // if (flag==1){
-      //       fprintf(stderr, "link bounds (%d %d) (%d %d) (%d %d) ,,,", link.bounds(0).min[0], link.bounds(0).max[0], link.bounds(0).min[1], link.bounds(0).max[1], link.bounds(0).min[2], link.bounds(0).max[2]);
-      //       fprintf(stderr, "link bounds (%d %d) (%d %d) (%d %d) ,,,", link.bounds(1).min[0], link.bounds(1).max[0], link.bounds(1).min[1], link.bounds(1).max[1], link.bounds(1).min[2], link.bounds(1).max[2]);
-      //       fprintf(stderr, "link bounds (%d %d) (%d %d) (%d %d) ,,,", link.bounds(2).min[0], link.bounds(2).max[0], link.bounds(2).min[1], link.bounds(2).max[1], link.bounds(2).min[2], link.bounds(2).max[2]);
-
-      // }
-
       // for all neighbors of this block
       for (int n = 0; n < link.size(); n++)
       {

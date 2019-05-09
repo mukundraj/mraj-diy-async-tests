@@ -95,17 +95,17 @@ void InitSeeds(Block*                       b,
     // for synthetic data, seed only -x side of the block
     int end = synth ? st[0] + 2: st[0] + sz[0];
     for (float i = st[0] + 1; i < end; i += sr)
-    {
+    {   
         // don't duplicate points on block boundaries
         if (share_face[0] && i < decomposer.domain.max[0] && i == l->core().max[0])
             continue;
         for (float j = st[1] + 1; j < st[1] + sz[1]; j += sr)
-        {
+        {   
             // don't duplicate points on block boundaries
             if (share_face[1] && i < decomposer.domain.max[1] && j == l->core().max[1])
                 continue;
             for (float k = st[2] + 1; k < st[2] + sz[2]; k += sr)
-            {
+            {   
                 // don't duplicate points on block boundaries
                 if (share_face[2] && i < decomposer.domain.max[2] && k == l->core().max[2])
                     continue;
@@ -179,19 +179,14 @@ void trace_particles(Block*                             b,
         // debug
 //         fmt::print(stderr, "gid {} particle {} has {} steps\n", cp.gid(), i, particles[i].nsteps);
 
-        int flag = 0;
-        if (cp.gid()==3){
-          flag = 1;
-        }
+        
 
         if (!inside(next_p, decomposer.domain))
             finished = true;
 
         if (finished){                    // this segment is done
             b->done++;
-            // if (flag == 1 && particles[i].pid==0){
-            //   printf("done %d %d, %f %f %f, %d\n", b->done, particles[i].nsteps, cur_p.coords[0], cur_p.coords[1], cur_p.coords[2], particles[i].pid);
-            // }
+           
           }
         else                             // find destination of segment endpoint
         {   
@@ -199,14 +194,6 @@ void trace_particles(Block*                             b,
             vector<int>::iterator it = dests.begin();
             insert_iterator<vector<int> > insert_it(dests, it);
             
-
-            // if (flag==1){
-
-            //         fprintf(stderr, "l->cores (%d %d) (%d %d) (%d %d) ,,,", l->core(0).min[0], l->core(0).max[0], l->core(0).min[1], l->core(0).max[1], l->core(0).min[2], l->core(0).max[2]);
-            // fprintf(stderr, "l->core (%d %d) (%d %d) (%d %d) ,,,", l->core(1).min[0], l->core(1).max[0], l->core(1).min[1], l->core(1).max[1], l->core(1).min[2], l->core(1).max[2]);
-            // fprintf(stderr, "l->core (%d %d) (%d %d) (%d %d) ,,, \n", l->core(2).min[0], l->core(2).max[0], l->core(2).min[1], l->core(2).max[1], l->core(2).min[2], l->core(2).max[2]);
-
-            // }
 
             // diy::in(*l, next_p.coords, insert_it, decomposer.domain);
             utl::in(*l, next_p.coords, insert_it, decomposer.domain, 0);
@@ -220,8 +207,8 @@ void trace_particles(Block*                             b,
                 // debug
 //                 fmt::print(stderr, "gid {} enq to gid {}\n", cp.gid(), bid.gid);
 
-                if (cp.gid() == 3 )
-                  fmt::print(stderr, " {} enq to gid {}, pid {}\n",cp.gid(), bid.gid, out_pt.pid);
+                // if (cp.gid() == 4 )
+                //   fmt::print(stderr, " {} enq to gid {}, pid {}\n",cp.gid(), bid.gid, out_pt.pid);
 
                 if (iexchange)                          // enqueuing single endpoint allows fine-grain iexchange if desired
                     cp.enqueue(bid, out_pt);
@@ -622,6 +609,8 @@ int main(int argc, char **argv)
 #endif
 
         MPI_Barrier(world);
+        fprintf(stderr, "finished particle tracing\n");
+        master.prof.totals().output(std::cerr);
 
         double cur_time = MPI_Wtime() - time_start;
 
