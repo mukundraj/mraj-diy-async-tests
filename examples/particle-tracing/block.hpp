@@ -412,12 +412,10 @@ struct AddSynthetic1 : public AddBlock
     AddSynthetic1(diy::Master&           m,
                  const float             slow_vel_,         // slow velocity
                  const float             fast_vel_,         // fast velocity
-                 const int               nslow_,            // number of slow regions per dimension
                  const Decomposer&       decomposer_) :
         AddBlock(m),
         slow_vel(slow_vel_),
         fast_vel(fast_vel_),
-        nslow(nslow_),
         decomposer(decomposer_) {}
 
     void operator()(int gid,
@@ -474,7 +472,6 @@ struct AddSynthetic1 : public AddBlock
 
     Decomposer  decomposer;
     float       slow_vel, fast_vel;
-    int         nslow;
 };
 
 // add a block to the master and set synthetic vector field

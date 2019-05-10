@@ -57,12 +57,6 @@
 #include <string.h>
 #include <thread>
 
-#ifdef MPE
-
-#include    "mpe.h"
-
-#endif
-
 using namespace std;
 
 #if !defined(IEXCHANGE)
@@ -95,17 +89,17 @@ void InitSeeds(Block*                       b,
     // for synthetic data, seed only -x side of the block
     int end = synth ? st[0] + 2: st[0] + sz[0];
     for (float i = st[0] + 1; i < end; i += sr)
-    {   
+    {
         // don't duplicate points on block boundaries
         if (share_face[0] && i < decomposer.domain.max[0] && i == l->core().max[0])
             continue;
         for (float j = st[1] + 1; j < st[1] + sz[1]; j += sr)
-        {   
+        {
             // don't duplicate points on block boundaries
             if (share_face[1] && i < decomposer.domain.max[1] && j == l->core().max[1])
                 continue;
             for (float k = st[2] + 1; k < st[2] + sz[2]; k += sr)
-            {   
+            {
                 // don't duplicate points on block boundaries
                 if (share_face[2] && i < decomposer.domain.max[2] && k == l->core().max[2])
                     continue;
@@ -157,9 +151,10 @@ void trace_particles(Block*                             b,
         bool    finished = false;
 
         // trace this segment as far as it will go in the local vector field
-        // while (trace_3D_rk1(gst, gsz, st, sz, vec, cur_p.coords.data(), 0.5, next_p.coords.data()))
+//         while (trace_3D_rk1(gst, gsz, st, sz, vec, cur_p.coords.data(), 0.5, next_p.coords.data()))
         while (advect_rk4(gst, gsz, st, sz, vec, cur_p.coords.data(), 0.5, next_p.coords.data()))
-        {   //fprintf(stderr,"size %d \n",particles[i].nsteps );
+        {
+            //fprintf(stderr,"size %d \n",particles[i].nsteps );
             particles[i].nsteps++;
             s.pts.push_back(next_p);
             // if (cp.gid()==4 && particles[i].pid==0){
@@ -179,21 +174,16 @@ void trace_particles(Block*                             b,
         // debug
 //         fmt::print(stderr, "gid {} particle {} has {} steps\n", cp.gid(), i, particles[i].nsteps);
 
-        
-
         if (!inside(next_p, decomposer.domain))
             finished = true;
 
-        if (finished){                    // this segment is done
+        if (finished)                    // this segment is done
             b->done++;
-           
-          }
         else                             // find destination of segment endpoint
-        {   
+        {
             vector<int> dests;
             vector<int>::iterator it = dests.begin();
             insert_iterator<vector<int> > insert_it(dests, it);
-            
 
             // diy::in(*l, next_p.coords, insert_it, decomposer.domain);
             utl::in(*l, next_p.coords, insert_it, decomposer.domain, 0);
@@ -303,8 +293,7 @@ void trace_block_exchange(Block*                              b,
                           const int                           max_steps,
                           const float                         seed_rate,
                           const Decomposer::BoolVector        share_face,
-                          bool                                synth,
-                          double                              cur_consensus_time)
+                          bool                                synth)
 {
     map<diy::BlockID, vector<EndPt> > outgoing_endpts;
 
@@ -315,9 +304,7 @@ void trace_block_exchange(Block*                              b,
         cp.enqueue(it->first, it->second);
 
     // stage all_reduce of total initialized and total finished particle traces
-    double t0 = MPI_Wtime();
     cp.all_reduce(b->particles.size(), plus<size_t>());
-    cur_consensus_time += (MPI_Wtime() - t0);
 }
 
 bool trace_block_iexchange(Block*                               b,
@@ -395,7 +382,6 @@ int main(int argc, char **argv)
     int synth               = 0;                // generate various synthetic input datasets
     float slow_vel          = 1.0;              // slow velocity for synthetic data
     float fast_vel          = 10.0;             // fast velocity for synthetic data
-    int nslow               = 2;                // number of slow regions per dimension for synthetic data
     int check               = 0;                // write out traces for checking
     std::string log_level   = "info";           // logging level
     int ntrials             = 1;                // number of trials
@@ -413,7 +399,6 @@ int main(int argc, char **argv)
         >> Option('o', "max-hold-time", max_hold_time,  "Maximum queue hold time (ms) for iexchange")
         >> Option('x', "synthetic",     synth,          "Generate various synthetic flows")
         >> Option('w', "slow-vel",      slow_vel,       "Slow velocity for synthetic data")
-        >> Option('v', "nslow",         nslow,          "Number of slow velocity regions per dimension for synthetic data")
         >> Option('f', "fast-vel",      fast_vel,       "Fast velocity for synthetic data")
         >> Option('c', "check",         check,          "Write out traces for checking")
         >> Option('l', "log",           log_level,      "log level")
@@ -433,7 +418,7 @@ int main(int argc, char **argv)
         }
         return 1;
     }
-//     diy::create_logger(log_level); 
+//     diy::create_logger(log_level);
     diy::FileStorage             storage(prefix);
     diy::Master                  master(world,
                                         nthreads,
@@ -461,7 +446,7 @@ int main(int argc, char **argv)
 
     if (synth == 1)
     {
-        AddSynthetic1 addsynth(master, slow_vel, fast_vel, nslow, decomposer);
+        AddSynthetic1 addsynth(master, slow_vel, fast_vel, decomposer);
         decomposer.decompose(world.rank(), assigner, addsynth);
     }
     else if (synth == 2)
@@ -481,7 +466,6 @@ int main(int argc, char **argv)
             fprintf(stderr, "input vectors created synthetically\n");
         else
             fprintf(stderr, "input vectors read from file %s\n", infile.c_str());
-        fprintf(stderr, "starting particle tracing\n");
     }
 
     // incremental stats
@@ -495,19 +479,16 @@ int main(int argc, char **argv)
     double prev_std_ncalls          = 0.0;
     double cur_mean_callback_time   = 0.0;                  // for exchange only
     double prev_mean_callback_time  = 0.0;                  // for exchange only
-    double cur_mean_comm_time       = 0.0;                  // for exchange only
-    double prev_mean_comm_time      = 0.0;                  // for exchange only
-    double cur_mean_consensus_time  = 0.0;                  // for exchange only
-    double prev_mean_consensus_time = 0.0;                  // for exchange only
 
     size_t nrounds                  = 0;
 
     // run the trials
     for (int trial = 0; trial < ntrials; trial++)           // number of trials
     {
+        if (world.rank() == 0)
+            fprintf(stderr, "started particle tracing trial %d\n", trial);
+
         double cur_callback_time        = 0.0;              // for exchange only
-        double cur_comm_time            = 0.0;              // for exchange only
-        double cur_consensus_time       = 0.0;              // for exchange only
 
         // reset the block particle traces, but leave the vector field intact
         master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
@@ -563,22 +544,17 @@ int main(int argc, char **argv)
                                              max_steps,
                                              seed_rate,
                                              share_face,
-                                             synth,
-                                             cur_consensus_time);
+                                             synth);
                     });
             cur_callback_time += (MPI_Wtime() - t0);
 
             // exchange
-            t0 = MPI_Wtime();
             master.exchange();
-            cur_comm_time += (MPI_Wtime() - t0);
 
             // determine if all particles are done
-            t0 = MPI_Wtime();
             size_t remaining;
             for (int i = 0; i < master.size(); i++)
                 remaining = master.proxy(i).get<size_t>();
-            cur_consensus_time += (MPI_Wtime() - t0);
 
             if (remaining == 0)
                 break;
@@ -609,8 +585,10 @@ int main(int argc, char **argv)
 #endif
 
         MPI_Barrier(world);
-        fprintf(stderr, "finished particle tracing\n");
-        master.prof.totals().output(std::cerr);
+
+        if (world.rank() == 0)
+            fprintf(stderr, "finished particle tracing trial %d\n", trial);
+//         master.prof.totals().output(std::cerr);
 
         double cur_time = MPI_Wtime() - time_start;
 
@@ -628,10 +606,6 @@ int main(int argc, char **argv)
             prev_mean_ncalls            = cur_ncalls;
             cur_mean_callback_time      = cur_callback_time;
             prev_mean_callback_time     = cur_callback_time;
-            cur_mean_comm_time          = cur_comm_time;
-            prev_mean_comm_time         = cur_comm_time;
-            cur_mean_consensus_time     = cur_consensus_time;
-            prev_mean_consensus_time    = cur_consensus_time;
             cur_std_time                = 0.0;
             cur_std_ncalls              = 0.0;
         }
@@ -640,25 +614,21 @@ int main(int argc, char **argv)
             cur_mean_time           = prev_mean_time            + (cur_time             - prev_mean_time)           / (trial + 1);
             cur_mean_ncalls         = prev_mean_ncalls          + (cur_ncalls           - prev_mean_ncalls)         / (trial + 1);
             cur_mean_callback_time  = prev_mean_callback_time   + (cur_callback_time    - prev_mean_callback_time)  / (trial + 1);
-            cur_mean_comm_time      = prev_mean_comm_time       + (cur_comm_time        - prev_mean_comm_time)      / (trial + 1);
-            cur_mean_consensus_time = prev_mean_consensus_time  + (cur_consensus_time   - prev_mean_consensus_time) / (trial + 1);
             cur_std_time            = prev_std_time             + (cur_time   - prev_mean_time)   * (cur_time   - cur_mean_time);
             cur_std_ncalls          = prev_std_ncalls           + (cur_ncalls - prev_mean_ncalls) * (cur_ncalls - cur_mean_ncalls);
         }
         prev_mean_time              = cur_mean_time;
         prev_mean_ncalls            = cur_mean_ncalls;
         prev_mean_callback_time     = cur_mean_callback_time;
-        prev_mean_comm_time         = cur_mean_comm_time;
-        prev_mean_consensus_time    = cur_mean_consensus_time;
         prev_std_time               = cur_std_time;
         prev_std_ncalls             = cur_std_ncalls;
 
         // debug
-        if (world.rank() == 0)
-        {
-            fmt::print(stderr, "trial {} time {} callback time {} comm time {} consensus time {} nrounds {} ncalls {}\n",
-                    trial, cur_time, cur_callback_time, cur_comm_time, cur_consensus_time, nrounds, cur_ncalls);
-        }
+//         if (world.rank() == 0)
+//         {
+//             fmt::print(stderr, "trial {} time {} callback time {} nrounds {} ncalls {}\n",
+//                     trial, cur_time, cur_callback_time, nrounds, cur_ncalls);
+//         }
 
         // merge-reduce traces to one block
         int k = 2;                               // the radix of the k-ary reduction tree
@@ -696,7 +666,7 @@ int main(int argc, char **argv)
     // print stats
 
     // debug
-    fmt::print(stderr, "rank {} mean callback (advect) time (s):\t{}\n",    world.rank(), cur_mean_callback_time);
+//     fmt::print(stderr, "rank {} mean callback (advect) time (s):\t{}\n",    world.rank(), cur_mean_callback_time);
 
     if (world.rank() == 0)
     {
@@ -722,8 +692,6 @@ int main(int argc, char **argv)
 #else
         fmt::print(stderr, "# rounds:\t\t\t\t{}\n",                     nrounds);
         fmt::print(stderr, "mean callback (advect) time (s):\t{}\n",    cur_mean_callback_time);
-        fmt::print(stderr, "mean comm time (s):\t\t\t{}\n",             cur_mean_comm_time);
-        fmt::print(stderr, "mean consensus time (s):\t\t{}\n",          cur_mean_consensus_time);
 #endif
 
         char infile[256];           // profile file name
@@ -731,26 +699,6 @@ int main(int argc, char **argv)
         sprintf(infile, "profile-iexchange-p%d-b%d.txt",        world.size(), nblocks);
 #else
         sprintf(infile, "profile-exchange-p%d-b%d.txt",         world.size(), nblocks);
-#endif
-
-        // count number of occurences of send-same-rank plus send-different rank in profile
-        // NB: only for the last trial; profile is overwritten for each trial
-#ifdef DIY_PROFILE
-            char cmd[256];
-            sprintf(cmd, "grep -c '>send-.*-rank' %s", infile);
-            char buf[256];
-            size_t ncalls;
-            FILE* pipe(popen(cmd, "r"));
-            if (!pipe)
-            {
-                fprintf(stderr, "Error: popen failed\n");
-                abort();
-            }
-            while (!feof(pipe))
-                if (fgets(buf, 128, pipe) != NULL)
-                    ncalls = atol(buf);
-            pclose(pipe);
-            fmt::print(stderr, "# send calls:\t\t{}\n",             ncalls);
 #endif
 
         fmt::print(stderr, "---------------------------\n");
