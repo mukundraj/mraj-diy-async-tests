@@ -17,6 +17,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cassert>
+#include <string.h>
 
 #include    <unistd.h>      // for debugging, adding sleep
 
