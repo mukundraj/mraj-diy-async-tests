@@ -441,6 +441,10 @@ struct AddSynthetic1 : public AddBlock
         vector<int> divs(coords.size());                    // number of blocks in each dimension
         decomposer.fill_divisions(divs);
 
+        // debug
+//         if (gid == 0)
+//             fmt::print(stderr, "divs = [{} {} {}]\n", divs[0], divs[1], divs[2]);
+
         // one slow diy block along diagonal
         bool slow_block = true;
         for (int i = 0; i < coords.size(); i++)

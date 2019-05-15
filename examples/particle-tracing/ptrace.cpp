@@ -87,7 +87,7 @@ void InitSeeds(Block*                       b,
 //         fmt::print(stderr, "gid{} is seeded\n", gid);
 
     // for synthetic data, seed only -x side of the block
-    int end = synth ? st[0] + 2: st[0] + sz[0];
+    float end = synth ? st[0] + 1 + sr: st[0] + sz[0];
     for (float i = st[0] + 1; i < end; i += sr)
     {
         // don't duplicate points on block boundaries
@@ -113,7 +113,7 @@ void InitSeeds(Block*                       b,
             }
         }
     }
-    // fprintf(stderr, "b->init %d\n", b->init);
+//     fprintf(stderr, "particles.size() %ld\n", particles.size());
 }
 
 // common to both exchange and iexchange
@@ -675,8 +675,6 @@ int main(int argc, char **argv)
         fmt::print(stderr, "---------- stats ----------\n");
 #if IEXCHANGE == 1
         fmt::print(stderr, "using iexchange\n");
-        fmt::print(stderr, "min queue size (bytes):\t\t{}\n",           min_queue_size);
-        fmt::print(stderr, "max hold time (micro s):\t\t{}\n",          max_hold_time);
 #else
         fmt::print(stderr, "using exchange\n");
 #endif
