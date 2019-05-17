@@ -385,6 +385,7 @@ int main(int argc, char **argv)
     int check               = 0;                // write out traces for checking
     std::string log_level   = "info";           // logging level
     int ntrials             = 1;                // number of trials
+    bool merged_traces      = false;            // traces have already been merged to one block
 
     Options ops(argc, argv);
     ops
@@ -630,14 +631,15 @@ int main(int argc, char **argv)
 //                     trial, cur_time, cur_callback_time, nrounds, cur_ncalls);
 //         }
 
+        // rendering
+#ifdef WITH_VTK
+#if 0                       // render one block with all traces
         // merge-reduce traces to one block
         int k = 2;                               // the radix of the k-ary reduction tree
         diy::RegularMergePartners  partners(decomposer, k);
         diy::reduce(master, assigner, partners, &merge_traces);
+        merged_traces = true;
 
-        // rendering
-#ifdef WITH_VTK
-#if 0                       // render one block with all traces
         if (world.rank() == 0)
         {
             fprintf(stderr, "converting particle traces to vtk polylines and rendering 1 block only\n");
@@ -705,6 +707,17 @@ int main(int argc, char **argv)
     // write trajectory segments out in order to validate that they are identical
     if (check)
     {
+        if (world.rank() == 0)
+            fprintf(stderr, "Check is turned on: merging traces to one block and writing them to disk\n");
+
+        // merge-reduce traces to one block
+        if (!merged_traces)
+        {
+            int k = 2;                               // the radix of the k-ary reduction tree
+            diy::RegularMergePartners  partners(decomposer, k);
+            diy::reduce(master, assigner, partners, &merge_traces);
+        }
+
         std::string filename;
         if(IEXCHANGE==0)
             filename = "exchange.txt";

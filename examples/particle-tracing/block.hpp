@@ -125,26 +125,25 @@ struct Block
         }
     }
 
-    void write_segments(std::string filename){
-
+    void write_segments(std::string filename)
+    {
         ofstream f;
         f.open (filename);
 
         //                printf("%ld", segments.size());
-        for (size_t i = 0; i < segments.size(); i++){
-            for (size_t j = 0; j < segments[i].pts.size(); j++){
+        for (size_t i = 0; i < segments.size(); i++)
+        {
+            for (size_t j = 0; j < segments[i].pts.size(); j++)
+            {
                 //                        fprintf(f, "%ld %f %f %f, ", segments[i].pts.size(),
                 //                               segments[i].pts[0].coords[0],
                 //                               segments[i].pts[0].coords[1],
                 //                               segments[i].pts[0].coords[2]);
-                f<<segments[i].pts[j].coords[0]<<" "<<segments[i].pts[j].coords[1]
-                                                   <<" "<<segments[i].pts[j].coords[2]<<" ";
+                f << segments[i].pts[j].coords[0] << " " << segments[i].pts[j].coords[1] << " " << segments[i].pts[j].coords[2] << " ";
             }
             f<<"\n";
         }
         f.close();
-
-
     }
 
 #ifdef WITH_VTK
