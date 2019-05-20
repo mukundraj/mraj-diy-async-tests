@@ -40,6 +40,7 @@
 #include <stdio.h>
 
 #include <pnetcdf.h>
+#include <iomanip>      // std::setprecision
 
 typedef diy::DiscreteBounds            Bounds;
 typedef diy::RegularGridLink           RGLink;
@@ -139,7 +140,7 @@ struct Block
                 //                               segments[i].pts[0].coords[0],
                 //                               segments[i].pts[0].coords[1],
                 //                               segments[i].pts[0].coords[2]);
-                f << segments[i].pts[j].coords[0] << " " << segments[i].pts[j].coords[1] << " " << segments[i].pts[j].coords[2] << " ";
+                f << std::setprecision(8)<<segments[i].pts[j].coords[0] << " " << segments[i].pts[j].coords[1] << " " << segments[i].pts[j].coords[2] << " ";
             }
             f<<"\n";
         }
