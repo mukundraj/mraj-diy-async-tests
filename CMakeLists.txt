@@ -1,13 +1,15 @@
 project                     (diy2-vtk7)
 cmake_minimum_required      (VERSION 2.8)
 
-option                      (diy_thread     "Enable diy threading"              OFF)
-option                      (WITH_VTK                                           OFF)
-option                      (WITH_TIMEINFO                                      ON)
-option                      (WITH_MPE       "Enable MPE logging"                OFF)
+option                      (diy_thread     "Enable diy threading"                                  OFF)
+option                      (WITH_VTK                                                               OFF)
+option                      (WITH_TIMEINFO                                                          ON)
+option                      (WITH_MPE       "Enable MPE logging"                                    OFF)
 option                      (wrapped_mpi    "MPI compiler wrapper requires no further MPI libs"     OFF)
 option                      (log            "Build DIY with logging"                                OFF)
 option                      (profile        "Build DIY with profiling"                              OFF)
+option                      (caliper        "Build DIY with caliper"                                OFF)
+
 
 
 # Default to Release
@@ -34,6 +36,14 @@ set                         (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 if                          (profile)
     add_definitions         (-DDIY_PROFILE)
 endif                       ()
+
+if                          (caliper)
+    add_definitions         (-DDIY_USE_CALIPER)
+
+    find_package            (caliper)
+    include_directories     (${caliper_INCLUDE_DIR})
+    set                     (libraries  ${libraries} caliper caliper-mpi)
+endif()
 
 # OSX flags
 if                          (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")

@@ -356,12 +356,94 @@ void merge_traces(void* b_, const diy::ReduceProxy& rp, const diy::RegularMergeP
     }
 }
 
+// debugging: catches segfaults and dumps a backtrace
+// copied from Dmitriy's henson/henson-chai.cpp
+
+#include <cxxabi.h>
+#include <signal.h>
+#include <execinfo.h>
+bool abort_on_segfault_ = true;
+
+void catch_sig(int signum)
+{
+    fmt::print(stderr, "caught signal {}\n", signum);
+
+    // print backtrace
+    void*   callstack[128];
+    int     frames      = backtrace(callstack, 128);
+    char**  strs        = backtrace_symbols(callstack, frames);
+
+    size_t funcnamesize = 256;
+    char*  funcname     = (char*) malloc(funcnamesize);
+
+    // iterate over the returned symbol lines. skip the first, it is the
+    // address of this function.
+    for (int i = 1; i < frames; i++)
+    {
+        char *begin_name = 0, *begin_offset = 0, *end_offset = 0;
+
+        // find parentheses and +address offset surrounding the mangled name:
+        // ./module(function+0x15c) [0x8048a6d]
+        for (char *p = strs[i]; *p; ++p)
+        {
+            if (*p == '(')
+                begin_name = p;
+            else if (*p == '+')
+                begin_offset = p;
+            else if (*p == ')' && begin_offset)
+            {
+                end_offset = p;
+                break;
+            }
+        }
+
+        if (begin_name && begin_offset && end_offset && begin_name < begin_offset)
+        {
+            *begin_name++   = '\0';
+            *begin_offset++ = '\0';
+            *end_offset     = '\0';
+
+            // mangled name is now in [begin_name, begin_offset) and caller
+            // offset in [begin_offset, end_offset). now apply __cxa_demangle():
+
+            int status;
+            char* ret = abi::__cxa_demangle(begin_name, funcname, &funcnamesize, &status);
+            if (status == 0)
+            {
+                funcname = ret; // use possibly realloc()-ed string
+                fmt::print(stderr, "  {} : {}+{}", strs[i], funcname, begin_offset);
+            } else
+            {
+                // demangling failed. Output function name as a C function with no arguments.
+                fmt::print(stderr, "  {} : {}()+{}", strs[i], begin_name, begin_offset);
+            }
+        }
+        else
+        {
+            // couldn't parse the line? print the whole line.
+            fmt::print(stderr, "  {}", strs[i]);
+        }
+    }
+
+    free(funcname);
+    free(strs);
+
+    //for (int i = 0; i < frames; ++i)
+    //    logger->critical("{}", strs[i]);
+
+    signal(signum, SIG_DFL);    // restore the default signal
+    if (abort_on_segfault_)
+        MPI_Abort(MPI_COMM_WORLD, 1);
+}
+
 int main(int argc, char **argv)
 {
-    string infile;                           // input file name
-    Bounds domain {3};                       // global domain bounds
-    int max_steps;                           // max number of steps a particle is allowed to take
-    float seed_rate;                           // seed particle every this many grid pts in each dim
+    signal(SIGSEGV, catch_sig);                 // catch segfault
+
+    string infile;                              // input file name
+    Bounds domain {3};                          // global domain bounds
+    int max_steps;                              // max number of steps a particle is allowed to take
+    float seed_rate;                            // seed particle every this many grid pts in each dim
 
     diy::mpi::environment  env(argc, argv);
     diy::mpi::communicator world;
