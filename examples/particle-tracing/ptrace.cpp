@@ -599,7 +599,9 @@ int main(int argc, char **argv)
                                                      share_face,
                                                      synth);
                     return val;
-                }, min_queue_size, max_hold_time, fine);
+                    //  DEPRECATED arguments to iexchange (remove)
+//                 }, min_queue_size, max_hold_time, fine);
+                });
 
 #else
 
