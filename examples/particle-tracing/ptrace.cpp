@@ -276,14 +276,20 @@ void trace_block(Block*                              b,
         InitSeeds(b, gid, decomposer, share_face, l, sr, st, sz, synth, b->particles);
     }
 
-    // dequeue incoming points
+    // dequeue incoming points and trace particles
     if (iexchange)
-        deq_incoming_iexchange(b, cp);
+    {
+        do
+        {
+            deq_incoming_iexchange(b, cp);
+            trace_particles(b, b->particles, cp, decomposer, max_steps, outgoing_endpts, iexchange);
+        } while (cp.fill_incoming());
+    }
     else
+    {
         deq_incoming_exchange(b, cp);
-
-    // trace particles
-    trace_particles(b, b->particles, cp, decomposer, max_steps, outgoing_endpts, iexchange);
+        trace_particles(b, b->particles, cp, decomposer, max_steps, outgoing_endpts, iexchange);
+    }
 }
 
 void trace_block_exchange(Block*                              b,
