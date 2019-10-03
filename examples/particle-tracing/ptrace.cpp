@@ -118,7 +118,6 @@ void InitSeeds(Block*                       b,
 
 // common to both exchange and iexchange
 void trace_particles(Block*                             b,
-                     vector<EndPt>                      particles,
                      const diy::Master::ProxyWithLink&  cp,
                      const Decomposer&                  decomposer,
                      const int                          max_steps,
@@ -143,36 +142,26 @@ void trace_particles(Block*                             b,
                            l->bounds().max[1] - l->bounds().min[1] + 1,
                            l->bounds().max[2] - l->bounds().min[2] + 1};
 
-    for (int i = 0; i < particles.size(); i++)
+    for (int i = 0; i < b->particles.size(); i++)
     {
-        Pt&     cur_p = particles[i].pt; // current end point
-        Segment s(particles[i]);         // segment with one point p
+        Pt&     cur_p = b->particles[i].pt; // current end point
+        Segment s(b->particles[i]);         // segment with one point p
         Pt      next_p;                  // coordinates of next end point
         bool    finished = false;
 
         // trace this segment as far as it will go in the local vector field
-//         while (trace_3D_rk1(gst, gsz, st, sz, vec, cur_p.coords.data(), 0.5, next_p.coords.data()))
         while (advect_rk4(gst, gsz, st, sz, vec, cur_p.coords.data(), 0.5, next_p.coords.data()))
         {
-            //fprintf(stderr,"size %d \n",particles[i].nsteps );
-            particles[i].nsteps++;
+            b->particles[i].nsteps++;
             s.pts.push_back(next_p);
-            // if (cp.gid()==4 && particles[i].pid==0){
-            //   fprintf(stderr, "p0 %f %f, st0+sz0-1 %d, %d, gst %d, gsz %d\n", cur_p.coords[0], next_p.coords[0], st[0] + sz[0] - 1, inside(3, st, sz, cur_p.coords.data()), gst[0], gsz[0]);
-            // }
             cur_p = next_p;
-            if (particles[i].nsteps >= max_steps)
+            if (b->particles[i].nsteps >= max_steps)
             {
                 finished = true;
                 break;
             }
-
-
         }
         b->segments.push_back(s);
-
-        // debug
-//         fmt::print(stderr, "gid {} particle {} has {} steps\n", cp.gid(), i, particles[i].nsteps);
 
         if (!inside(next_p, decomposer.domain))
             finished = true;
@@ -185,11 +174,11 @@ void trace_particles(Block*                             b,
             vector<int>::iterator it = dests.begin();
             insert_iterator<vector<int> > insert_it(dests, it);
 
-            // diy::in(*l, next_p.coords, insert_it, decomposer.domain);
+//             diy::in(*l, next_p.coords, insert_it, decomposer.domain);
             utl::in(*l, next_p.coords, insert_it, decomposer.domain, 0);
 
             EndPt out_pt(s);
-            out_pt.nsteps = particles[i].nsteps;
+            out_pt.nsteps = b->particles[i].nsteps;
             if (dests.size())
             {
                 diy::BlockID bid = l->target(dests[0]); // in case of multiple dests, send to first dest only
@@ -279,16 +268,17 @@ void trace_block(Block*                              b,
     // dequeue incoming points and trace particles
     if (iexchange)
     {
-        do
-        {
+//         do
+//         {
             deq_incoming_iexchange(b, cp);
-            trace_particles(b, b->particles, cp, decomposer, max_steps, outgoing_endpts, iexchange);
-        } while (cp.fill_incoming());
+            trace_particles(b, cp, decomposer, max_steps, outgoing_endpts, iexchange);
+//             b->particles.clear();
+//         } while (cp.fill_incoming());
     }
     else
     {
         deq_incoming_exchange(b, cp);
-        trace_particles(b, b->particles, cp, decomposer, max_steps, outgoing_endpts, iexchange);
+        trace_particles(b, cp, decomposer, max_steps, outgoing_endpts, iexchange);
     }
 }
 
