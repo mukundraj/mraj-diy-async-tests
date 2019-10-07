@@ -33,10 +33,11 @@ struct Pt
 };
 
 // whether a point is inside given bounds
+// on the boundary is considered inside
 bool inside(const Pt& pt, const Bounds bounds)
 {
     for (int i = 0; i < 3; i++)
-        if (pt.coords[i] < bounds.min[i] || pt.coords[i] >= bounds.max[i] - 1)
+        if (pt.coords[i] < bounds.min[i] || pt.coords[i] > bounds.max[i])
             return false;
     return true;
 }
@@ -44,9 +45,9 @@ bool inside(const Pt& pt, const Bounds bounds)
 // one end point of a particle trace segment
 struct EndPt
 {
-    int  pid;                                // particle ID
+    int  pid;                                // particle ID, for now unique only within a block, not globally
     Pt   pt;                                 // end pointof the trace
-    int  sid;                                // segment ID of this part of the trace
+    int  sid;                                // segment ID of this part of the trace, for now same as pid
     int  nsteps;                             // number of steps this particle went so far
 
     const float& operator [](int i) const { return pt.coords[i]; }
@@ -64,9 +65,9 @@ struct EndPt
 // one segment of a particle trace (trajectory)
 struct Segment
 {
-    int        pid;                          // particle ID
+    int        pid;                          // particle ID, for now unique only within a block, not globally
     vector<Pt> pts;                          // points along trace
-    int        sid;                          // segment ID of this part of the trace
+    int        sid;                          // segment ID of this part of the trace, for now same as pid
 
     Segment()
         {
@@ -82,10 +83,11 @@ struct Segment
         }
 
     // whether end point is inside given bounds
+    // on the boundary is considered inside
     bool inside(const int lb[3], const int ub[3]) const
         {
             for (int i = 0; i < 3; i++)
-                if (pts.back().coords[i] < lb[i] || pts.back().coords[i] >= ub[i] - 1)
+                if (pts.back().coords[i] < lb[i] || pts.back().coords[i] > ub[i])
                     return false;
             return true;
         }

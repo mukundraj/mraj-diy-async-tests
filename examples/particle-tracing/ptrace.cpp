@@ -126,7 +126,7 @@ void trace_particles(Block*                             b,
 {
     diy::RegularLink<Bounds> *l = static_cast<diy::RegularLink<Bounds>*>(cp.link());
 
-    const float *vec[3] = {b->vel[0],
+    const float *vec[3] = {b->vel[0],           // shallow pointer copy
                            b->vel[1],
                            b->vel[2]};
     const int   st[3]   = {l->core().min[0],
@@ -135,22 +135,16 @@ void trace_particles(Block*                             b,
     const int   sz[3]   = {l->core().max[0] - l->core().min[0] + 1,
                            l->core().max[1] - l->core().min[1] + 1,
                            l->core().max[2] - l->core().min[2] + 1};
-    const int   gst[3]  = {l->bounds().min[0],
-                           l->bounds().min[1],
-                           l->bounds().min[2]};
-    const int   gsz[3]  = {l->bounds().max[0] - l->bounds().min[0] + 1,
-                           l->bounds().max[1] - l->bounds().min[1] + 1,
-                           l->bounds().max[2] - l->bounds().min[2] + 1};
 
-    for (int i = 0; i < b->particles.size(); i++)
+    for (auto i = 0; i < b->particles.size(); i++)
     {
-        Pt&     cur_p = b->particles[i].pt; // current end point
-        Segment s(b->particles[i]);         // segment with one point p
-        Pt      next_p;                  // coordinates of next end point
+        Pt&     cur_p = b->particles[i].pt;     // current end point
+        Segment s(b->particles[i]);             // segment with one point p
+        Pt      next_p;                         // coordinates of next end point
         bool    finished = false;
 
-        // trace this segment as far as it will go in the local vector field
-        while (advect_rk4(gst, gsz, st, sz, vec, cur_p.coords.data(), 0.5, next_p.coords.data()))
+        // trace this segment until it leaves the block core (no ghost)
+        while (advect_rk4(st, sz, vec, cur_p.coords.data(), 0.5, next_p.coords.data()))
         {
             b->particles[i].nsteps++;
             s.pts.push_back(next_p);
@@ -174,8 +168,9 @@ void trace_particles(Block*                             b,
             vector<int>::iterator it = dests.begin();
             insert_iterator<vector<int> > insert_it(dests, it);
 
-//             diy::in(*l, next_p.coords, insert_it, decomposer.domain);
-            utl::in(*l, next_p.coords, insert_it, decomposer.domain, 0);
+            // switching back to diy's in() function with core bounds (no ghost)
+            diy::in(*l, next_p.coords, insert_it, decomposer.domain, 1);
+//             utl::in(*l, next_p.coords, insert_it, decomposer.domain, 0);
 
             EndPt out_pt(s);
             out_pt.nsteps = b->particles[i].nsteps;
@@ -329,25 +324,22 @@ void merge_traces(void* b_, const diy::ReduceProxy& rp, const diy::RegularMergeP
     for (unsigned i = 0; i < rp.in_link().size(); ++i)
     {
         int nbr_gid = rp.in_link().target(i).gid;
-        if (nbr_gid == rp.gid())               // skip self
+        if (nbr_gid == rp.gid())                    // skip self
             continue;
 
         vector<Segment> in_traces;
         rp.dequeue(nbr_gid, in_traces);
 
-        // append in_traces to segments
-        // TODO: the right way is to sort segments with the same pid into increasing sid order
-        // and renumber them into a single trace (streamline, pathline, etc.)
-        // for now, we're leaving the traces segmented and disorganized
+        // append in_traces to segments, leaving trajectories segmented and disorganized
+        // pids and sids are not globally unique, so not possible to sort into full length trajectories
         b->segments.insert(b->segments.end(), in_traces.begin(), in_traces.end());
     }
 
     // enqueue
-    // NB, for a merge, the out_link size is 1; ie, there is only one target
-
-    if (rp.out_link().size()){
-        int nbr_gid = rp.out_link().target(0).gid;
-        if (rp.out_link().size() && nbr_gid != rp.gid()) // skip self
+    if (rp.out_link().size())
+    {
+        int nbr_gid = rp.out_link().target(0).gid;  // for a merge, the out_link size is 1; ie, there is only one target
+        if (nbr_gid != rp.gid())                    // skip self
             rp.enqueue(rp.out_link().target(0), b->segments);
     }
 }
@@ -713,7 +705,7 @@ int main(int argc, char **argv)
 
         // rendering
 #ifdef WITH_VTK
-#if 0                       // render one block with all traces
+#if 1                       // render one block with all traces
         // merge-reduce traces to one block
         int k = 2;                               // the radix of the k-ary reduction tree
         diy::RegularMergePartners  partners(decomposer, k);
@@ -783,6 +775,10 @@ int main(int argc, char **argv)
 
         fmt::print(stderr, "---------------------------\n");
     }
+
+    // debug
+//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+//             { b->show_geometry(cp); });
 
     // write trajectory segments out in order to validate that they are identical
     if (check)

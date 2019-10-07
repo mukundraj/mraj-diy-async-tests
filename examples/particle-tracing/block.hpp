@@ -102,7 +102,7 @@ struct Block
     }
 
     // debug
-    void show_geometry(const diy::Master::ProxyWithLink& cp, void*)
+    void show_geometry(const diy::Master::ProxyWithLink& cp)
     {
         diy::RegularLink<Bounds> *link = static_cast<diy::RegularLink<Bounds>*>(cp.link());
 
@@ -117,7 +117,7 @@ struct Block
                 link->size());
         for (size_t i = 0; i < segments.size(); i++)
         {
-            fprintf(stderr, "[pid %d num_pts %ld]\n", segments[i].pid, segments[i].pts.size());
+            fprintf(stderr, "[pid %d  sid %d num_pts %ld]\n", segments[i].pid, segments[i].sid, segments[i].pts.size());
             for (size_t j = 0; j < segments[i].pts.size(); j++)
                 fprintf(stderr, "[%.3f %.3f %.3f] ",
                         segments[i].pts[j].coords[0], segments[i].pts[j].coords[1],
@@ -129,7 +129,7 @@ struct Block
     void write_segments(std::string filename)
     {
         ofstream f;
-        f.open (filename);
+        f.open(filename);
 
         //                printf("%ld", segments.size());
         for (size_t i = 0; i < segments.size(); i++)
@@ -142,7 +142,7 @@ struct Block
                 //                               segments[i].pts[0].coords[2]);
                 f << std::setprecision(8)<<segments[i].pts[j].coords[0] << " " << segments[i].pts[j].coords[1] << " " << segments[i].pts[j].coords[2] << " ";
             }
-            f<<"\n";
+            f << "\n";
         }
         f.close();
     }
@@ -163,7 +163,7 @@ struct Block
         // add points from each trace to one global list of vtkPoints
         for (size_t i = 0; i < segments.size(); i++)
             for (size_t j = 0; j < segments[i].pts.size(); j++)
-                points->InsertNextPoint(segments[i].pts[j].coords); // deep copy, I assume?
+                points->InsertNextPoint(&(segments[i].pts[j].coords[0])); // deep copy, I assume?
 
         // create a polyline from each trace and a cell from each polyline
         for (size_t i = 0; i < segments.size(); i++)

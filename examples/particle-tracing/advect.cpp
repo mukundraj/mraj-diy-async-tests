@@ -19,146 +19,111 @@
 #include <cassert>
 #include <string.h>
 
-#include    <unistd.h>      // for debugging, adding sleep
+bool trace_3D_brown(
+        const int *st,      // min. corner of block
+        const int *sz,      // size (number of points) in block
+        const float **vec,  // vector field
+        float *X,           // input point
+        float h,            // step size
+        float *Y = NULL)    // output point if not NULL, otherwise in X
+{
+    if (!inside(3, st, sz, X)) return false;
 
-extern "C" {
-
-    bool trace_3D_brown(const int *st,
-                        const int *sz,
-                        const float **vec,
-                        float *X,
-                        float h,
-                        float *Y = NULL)     // result returned here if not NULL, otherwise in X
+    if (Y)
     {
-        if (!inside(3, st, sz, X)) return false;
-
-        if (Y)
-        {
-            Y[0] = X[0] + (float)rand()/RAND_MAX - 0.5;
-            Y[1] = X[1] + (float)rand()/RAND_MAX - 0.5;
-            Y[2] = X[2] + (float)rand()/RAND_MAX - 0.5;
-        }
-        else
-        {
-            X[0] = X[0] + (float)rand()/RAND_MAX - 0.5;
-            X[1] = X[1] + (float)rand()/RAND_MAX - 0.5;
-            X[2] = X[2] + (float)rand()/RAND_MAX - 0.5;
-        }
-
-        return true;
+        Y[0] = X[0] + (float)rand()/RAND_MAX - 0.5;
+        Y[1] = X[1] + (float)rand()/RAND_MAX - 0.5;
+        Y[2] = X[2] + (float)rand()/RAND_MAX - 0.5;
+    }
+    else
+    {
+        X[0] = X[0] + (float)rand()/RAND_MAX - 0.5;
+        X[1] = X[1] + (float)rand()/RAND_MAX - 0.5;
+        X[2] = X[2] + (float)rand()/RAND_MAX - 0.5;
     }
 
-    bool trace_3D_rk1(const int *gst,
-                      const int *gsz,
-                      const int *st,
-                      const int *sz,
-                      const float **vec,
-                      float *X,
-                      float h,
-                      float *Y = NULL)       // result returned here if not NULL, otherwise in X
-    {
-        // debug: intentionally slow down
-//         usleep(100);
-
-        if (!inside(3, st, sz, X)) return false;
-
-        float v[3];
-        if (!lerp3D(X, st, sz, 3, vec, v))
-            return false;
-
-        if (Y)
-        {
-            Y[0] = X[0] + h*v[0];
-            Y[1] = X[1] + h*v[1];
-            Y[2] = X[2] + h*v[2];
-        }
-        else
-        {
-            X[0] = X[0] + h*v[0];
-            X[1] = X[1] + h*v[1];
-            X[2] = X[2] + h*v[2];
-        }
-
-        return true;
-    }
-
-    bool trace_4D_rk1(const int *gst,
-                      const int *gsz,
-                      const int *st,
-                      const int *sz,
-                      const float **vec,
-                      float *X,
-                      float h,
-                      float *Y = NULL)       // result returned here if not NULL, otherwise in X
-    {
-        if (!inside(4, gst, gsz, X)) return false;
-
-        float v[3];
-        if (!lerp4D(X, gst, gsz, 3, vec, v))
-            return false;
-
-        if (Y)
-        {
-            Y[0] = X[0] + h*v[0];
-            Y[1] = X[1] + h*v[1];
-            Y[2] = X[2] + h*v[2];
-            Y[3] = X[3] + h; // TODO
-        }
-        else
-        {
-            X[0] = X[0] + h*v[0];
-            X[1] = X[1] + h*v[1];
-            X[2] = X[2] + h*v[2];
-            X[3] = X[3] + h; // TODO
-        }
-
-        return true;
-    }
-
+    return true;
 }
 
-
-
-bool advect_rk4(const int *gst,
-                const int *gsz,
-                const int *st,
-                const int *sz,
-                const float **vec,
-                float *pt,
-                float h,
-                float* Y )
+bool trace_3D_rk1(
+        const int *st,      // min. corner of block
+        const int *sz,      // size (number of points) in block
+        const float **vec,  // vector field
+        float *X,           // input point
+        float h,            // step size
+        float *Y = NULL)    // output point if not NULL, otherwise in X
 {
-  int num_dims = 3;
+    if (!inside(3, st, sz, X)) return false;
 
-  float p0[num_dims]; 
-  memcpy(p0, pt, sizeof(float)*num_dims); 
-  
-  float v[num_dims]; 
+    float v[3];
+    if (!lerp3D(X, st, sz, 3, vec, v))
+        return false;
 
-  // 1st rk step
-  if (!lerp3D(pt, st, sz, 3, vec, v)) return false; 
-  float k1[num_dims]; 
-  for (int i=0; i<num_dims; i++) k1[i] = h*v[i]; 
-  for (int i=0; i<num_dims; i++) Y[i] = p0[i] + 0.5*k1[i]; 
-  
-  // 2nd rk step
-  if (!lerp3D(Y, st, sz, 3, vec, v)) return true; 
-  float k2[num_dims]; 
-  for (int i=0; i<num_dims; i++) k2[i] = h*v[i]; 
-  for (int i=0; i<num_dims; i++) Y[i] = Y[i] + 0.5*k2[i]; 
+    if (Y)
+    {
+        Y[0] = X[0] + h*v[0];
+        Y[1] = X[1] + h*v[1];
+        Y[2] = X[2] + h*v[2];
+    }
+    else
+    {
+        X[0] = X[0] + h*v[0];
+        X[1] = X[1] + h*v[1];
+        X[2] = X[2] + h*v[2];
+    }
 
-  // 3rd rk step
-  if (!lerp3D(Y, st, sz, 3, vec, v)) return true; 
-  float k3[num_dims]; 
-  for (int i=0; i<num_dims; i++) k3[i] = h*v[i]; 
-  for (int i=0; i<num_dims; i++) Y[i] = Y[i] + k3[i]; 
+    return true;
+}
 
-  // 4th rk step
-  if (!lerp3D(Y, st, sz, 3, vec, v)) return true; 
-  for (int i=0; i<num_dims; i++) 
-    Y[i] = Y[i] + (k1[i] + 2.0*(k2[i]+k3[i]) + h*v[i])/6.0; 
+bool advect_rk4(
+        const int *st,      // min. corner of block
+        const int *sz,      // size (number of points) in block
+        const float **vec,  // vector field
+        float *pt,          // input point
+        float h,            // step size
+        float* Y)           // output point
+{
+    int num_dims = 3;
 
-  return true; 
+    float p0[num_dims];
+    memcpy(p0, pt, sizeof(float)*num_dims); 
+
+    float v[num_dims];
+
+    // 1st rk step
+    if (!lerp3D(pt, st, sz, 3, vec, v))
+        return false;
+    float k1[num_dims];
+    for (int i = 0; i < num_dims; i++)
+        k1[i] = h * v[i];
+    for (int i = 0; i < num_dims; i++)
+        Y[i] = p0[i] + 0.5 * k1[i];
+
+    // 2nd rk step
+    if (!lerp3D(Y, st, sz, 3, vec, v))
+        return true;
+    float k2[num_dims];
+    for (int i = 0; i < num_dims; i++)
+        k2[i] = h * v[i];
+    for (int i = 0; i < num_dims; i++)
+        Y[i] = Y[i] + 0.5 * k2[i];
+
+    // 3rd rk step
+    if (!lerp3D(Y, st, sz, 3, vec, v))
+        return true;
+    float k3[num_dims];
+    for (int i = 0; i < num_dims; i++)
+        k3[i] = h * v[i];
+    for (int i = 0; i < num_dims; i++)
+        Y[i] = Y[i] + k3[i];
+
+    // 4th rk step
+    if (!lerp3D(Y, st, sz, 3, vec, v))
+        return true;
+    for (int i = 0; i < num_dims; i++)
+        Y[i] = Y[i] + (k1[i] + 2.0 * (k2[i] + k3[i]) + h * v[i]) / 6.0;
+
+    return true;
 }
 
 
