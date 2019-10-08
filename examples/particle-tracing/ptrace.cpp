@@ -68,13 +68,9 @@ int counter = 0;
 void InitSeeds(Block*                       b,
                int                          gid,
                const Decomposer&            decomposer,
-               const Decomposer::BoolVector share_face,
                diy::RegularLink<Bounds>*    l,
-               const float                  sr,
-               const int*                   st,
-               const int*                   sz,
-               int                          synth,
-               vector<EndPt>&               particles)
+               float                        sr,
+               int                          synth)
 {
     // for synthetic data, seed only blocks at -x side of domain, and skip others
     std::vector<int> coords;
@@ -84,36 +80,40 @@ void InitSeeds(Block*                       b,
 
     // debug
 //     if (synth)
-//         fmt::print(stderr, "gid{} is seeded\n", gid);
+//         fmt::print(stderr, "gid {} is seeded\n", gid);
+
+    // seed interior of block (1 step inside of all block core boundaries)
+    // particles at block boundaries are ambiguous as to which block they belong
+    // best to avoid this case when seeding them
 
     // for synthetic data, seed only -x side of the block
-    float end = synth ? st[0] + 1 + sr: st[0] + sz[0];
-    for (float i = st[0] + 1; i < end; i += sr)
+    float epsilon = 1.0e-10;            // a small increment
+    float end = synth ? l->core().min[0] + 1.0 + epsilon: l->core().max[0] - 1.0;
+
+    // seed the block
+    for (float i = float(l->core().min[0]) + 1.0; i <= end; i += sr)
     {
-        // don't duplicate points on block boundaries
-        if (share_face[0] && i < decomposer.domain.max[0] && i == l->core().max[0])
-            continue;
-        for (float j = st[1] + 1; j < st[1] + sz[1]; j += sr)
+        for (float j = l->core().min[1] + 1.0; j <= l->core().max[1] - 1.0; j += sr)
         {
-            // don't duplicate points on block boundaries
-            if (share_face[1] && i < decomposer.domain.max[1] && j == l->core().max[1])
-                continue;
-            for (float k = st[2] + 1; k < st[2] + sz[2]; k += sr)
+            for (float k = l->core().min[2] + 1.0; k <= l->core().max[2] - 1.0; k += sr)
             {
-                // don't duplicate points on block boundaries
-                if (share_face[2] && i < decomposer.domain.max[2] && k == l->core().max[2])
-                    continue;
                 EndPt p;
                 p.pid = b->init;
                 p.sid = b->init;
                 p[0] = i;  p[1] = j;  p[2] = k;
-                particles.push_back(p);
-
-                b->init++; // needed for both
+                b->particles.push_back(p);
+                b->init++;
             }
         }
     }
-//     fprintf(stderr, "particles.size() %ld\n", particles.size());
+
+    // debug
+//     if (gid == 0)
+//     {
+//         fmt::print(stderr, "particles.size() {}\n", b->particles.size());
+//         for (auto i = 0; i < b->particles.size(); i++)
+//             fmt::print(stderr, "[{} {} {}]\n", b->particles[i][0], b->particles[i][1], b->particles[i][2]);
+//     }
 }
 
 // common to both exchange and iexchange
@@ -180,9 +180,6 @@ void trace_particles(Block*                             b,
 
                 // debug
 //                 fmt::print(stderr, "gid {} enq to gid {}\n", cp.gid(), bid.gid);
-
-                // if (cp.gid() == 4 )
-                //   fmt::print(stderr, " {} enq to gid {}, pid {}\n",cp.gid(), bid.gid, out_pt.pid);
 
                 if (iexchange)                          // enqueuing single endpoint allows fine-grain iexchange if desired
                     cp.enqueue(bid, out_pt);
@@ -254,21 +251,17 @@ void trace_block(Block*                              b,
 
     // initialize seed particles first time
     if (b->init == 0)
-    {
-        // int sr = (seed_rate < 1 ? 1 : seed_rate);
-        float sr = seed_rate;
-        InitSeeds(b, gid, decomposer, share_face, l, sr, st, sz, synth, b->particles);
-    }
+        InitSeeds(b, gid, decomposer, l, seed_rate, synth);
 
     // dequeue incoming points and trace particles
     if (iexchange)
     {
-//         do
-//         {
+        do
+        {
             deq_incoming_iexchange(b, cp);
             trace_particles(b, cp, decomposer, max_steps, outgoing_endpts, iexchange);
-//             b->particles.clear();
-//         } while (cp.fill_incoming());
+            b->particles.clear();
+        } while (cp.fill_incoming());
     }
     else
     {
@@ -330,9 +323,15 @@ void merge_traces(void* b_, const diy::ReduceProxy& rp, const diy::RegularMergeP
         vector<Segment> in_traces;
         rp.dequeue(nbr_gid, in_traces);
 
+        // debug
+//         fmt::print(stderr, "dequeuing {} segments\n", in_traces.size());
+
         // append in_traces to segments, leaving trajectories segmented and disorganized
         // pids and sids are not globally unique, so not possible to sort into full length trajectories
         b->segments.insert(b->segments.end(), in_traces.begin(), in_traces.end());
+
+        // debug
+//         fmt::print(stderr, "merged to total of {} segments\n", b->segments.size());
     }
 
     // enqueue
@@ -340,7 +339,11 @@ void merge_traces(void* b_, const diy::ReduceProxy& rp, const diy::RegularMergeP
     {
         int nbr_gid = rp.out_link().target(0).gid;  // for a merge, the out_link size is 1; ie, there is only one target
         if (nbr_gid != rp.gid())                    // skip self
+        {
             rp.enqueue(rp.out_link().target(0), b->segments);
+            // debug
+//             fmt::print(stderr, "enqueuing {} segments\n", b->segments.size());
+        }
     }
 }
 
@@ -570,10 +573,10 @@ int main(int argc, char **argv)
                     b->particles.clear();
                 });
 
-        MPI_Barrier(world);
+        world.barrier();
         double time_start = MPI_Wtime();
 
-#if IEXCHANGE == 1
+#if IEXCHANGE == 1              // iexchange
 
         // combined advection and exchange
         master.iexchange([&](Block* b, const diy::Master::ProxyWithLink& icp) -> bool
@@ -587,11 +590,9 @@ int main(int argc, char **argv)
                                                      share_face,
                                                      synth);
                     return val;
-                    //  DEPRECATED arguments to iexchange (remove)
-//                 }, min_queue_size, max_hold_time, fine);
                 });
 
-#else
+#else                           // exchange
 
         // particle tracing for either a maximum number of rounds or, if max_rounds == 0,
         // then for inifinitely many rounds until breaking out when done is true
@@ -631,7 +632,7 @@ int main(int argc, char **argv)
 
             if (remaining == 0)
                 break;
-        }
+        }       // rounds
 
         // debug: exceeded number of rounds for exchange
         if (nrounds == max_rounds)
@@ -657,7 +658,7 @@ int main(int argc, char **argv)
 
 #endif
 
-        MPI_Barrier(world);
+        world.barrier();
 
         if (world.rank() == 0)
             fprintf(stderr, "finished particle tracing trial %d\n", trial);
@@ -739,9 +740,6 @@ int main(int argc, char **argv)
 
     // print stats
 
-    // debug
-//     fmt::print(stderr, "rank {} mean callback (advect) time (s):\t{}\n",    world.rank(), cur_mean_callback_time);
-
     if (world.rank() == 0)
     {
         // ncalls: number of calls in case of IEXCHANGE
@@ -794,12 +792,15 @@ int main(int argc, char **argv)
             diy::reduce(master, assigner, partners, &merge_traces);
         }
 
-        std::string filename;
-        if(IEXCHANGE==0)
-            filename = "exchange.txt";
-        else
-            filename = "iexchange.txt";
-        ((Block*)master.block(0))->write_segments(filename);
+        if (world.rank() == 0)
+        {
+            std::string filename;
+            if (IEXCHANGE)
+                filename = "iexchange.txt";
+            else
+                filename = "exchange.txt";
+            ((Block*)master.block(0))->write_segments(filename);
+        }
     }
 
     return 0;

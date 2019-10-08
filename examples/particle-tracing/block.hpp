@@ -106,24 +106,28 @@ struct Block
     {
         diy::RegularLink<Bounds> *link = static_cast<diy::RegularLink<Bounds>*>(cp.link());
 
-        fprintf(stderr, "rank=%d, gid=%d, "
-                        "{%d, %d, %d}x{%d, %d, %d}, {%d, %d, %d}x{%d, %d, %d}, %d\n",
-                cp.master()->communicator().rank(),
-                cp.gid(),
-                link->core().min[0], link->core().min[1], link->core().min[2],
-                link->core().max[0], link->core().max[1], link->core().max[2],
-                link->bounds().min[0], link->bounds().min[1], link->bounds().min[2],
-                link->bounds().max[0], link->bounds().max[1], link->bounds().max[2],
-                link->size());
-        for (size_t i = 0; i < segments.size(); i++)
-        {
-            fprintf(stderr, "[pid %d  sid %d num_pts %ld]\n", segments[i].pid, segments[i].sid, segments[i].pts.size());
-            for (size_t j = 0; j < segments[i].pts.size(); j++)
-                fprintf(stderr, "[%.3f %.3f %.3f] ",
-                        segments[i].pts[j].coords[0], segments[i].pts[j].coords[1],
-                        segments[i].pts[j].coords[2]);
-            fprintf(stderr, "\n");
-        }
+//         fprintf(stderr, "rank=%d, gid=%d, core={%d, %d, %d} x {%d, %d, %d}, bounds={%d, %d, %d} x {%d, %d, %d}, %d\n",
+//                 cp.master()->communicator().rank(),
+//                 cp.gid(),
+//                 link->core().min[0], link->core().min[1], link->core().min[2],
+//                 link->core().max[0], link->core().max[1], link->core().max[2],
+//                 link->bounds().min[0], link->bounds().min[1], link->bounds().min[2],
+//                 link->bounds().max[0], link->bounds().max[1], link->bounds().max[2],
+//                 link->size());
+
+        fmt::print(stderr, "rank {} gid {} has {} segments\n", cp.master()->communicator().rank(), cp.gid(), segments.size());
+
+//         for (size_t i = 0; i < segments.size(); i++)
+//         {
+//             fprintf(stderr, "[pid %d  sid %d num_pts %ld]\n", segments[i].pid, segments[i].sid, segments[i].pts.size());
+// //             for (size_t j = 0; j < segments[i].pts.size(); j++)
+//             if (segments[i].pts.size())     // print only first point in segment (all points are too much)
+//             {
+//                 for (size_t j = 0; j < 1; j++)
+//                     fprintf(stderr, "[%.3f %.3f %.3f] ",segments[i].pts[j].coords[0], segments[i].pts[j].coords[1], segments[i].pts[j].coords[2]);
+//                 fprintf(stderr, "\n");
+//             }
+//         }
     }
 
     void write_segments(std::string filename)
@@ -131,18 +135,18 @@ struct Block
         ofstream f;
         f.open(filename);
 
-        //                printf("%ld", segments.size());
+        // debug
+//         fmt::print("writing {} segments\n", segments.size());
+
         for (size_t i = 0; i < segments.size(); i++)
         {
             for (size_t j = 0; j < segments[i].pts.size(); j++)
             {
-                //                        fprintf(f, "%ld %f %f %f, ", segments[i].pts.size(),
-                //                               segments[i].pts[0].coords[0],
-                //                               segments[i].pts[0].coords[1],
-                //                               segments[i].pts[0].coords[2]);
-                f << std::setprecision(8)<<segments[i].pts[j].coords[0] << " " << segments[i].pts[j].coords[1] << " " << segments[i].pts[j].coords[2] << " ";
+                // debug
+//                 fprintf(f, "%ld %f %f %f, ", segments[i].pts.size(), segments[i].pts[0].coords[0], segments[i].pts[0].coords[1], segments[i].pts[0].coords[2]);
+                f << std::setprecision(8) << segments[i].pts[j].coords[0] << " " << segments[i].pts[j].coords[1] << " " << segments[i].pts[j].coords[2] << " ";
             }
-            f << "\n";
+            f << endl;
         }
         f.close();
     }
