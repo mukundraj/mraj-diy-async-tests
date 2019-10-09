@@ -26,6 +26,23 @@ typedef diy::DiscreteBounds            Bounds;
 typedef diy::RegularGridLink           RGLink;
 typedef diy::RegularDecomposer<Bounds> Decomposer;
 
+// incremental stats
+// NB, default initialization is 0.0 for all members
+struct Stats
+{
+    double cur_mean_time;
+    double prev_mean_time;
+    double cur_std_time;
+    double prev_std_time;
+    double cur_mean_ncalls;
+    double prev_mean_ncalls;
+    double cur_std_ncalls;
+    double prev_std_ncalls;
+    double cur_callback_time;
+    double cur_mean_callback_time;
+    double prev_mean_callback_time;
+};
+
 // one point
 struct Pt
 {
