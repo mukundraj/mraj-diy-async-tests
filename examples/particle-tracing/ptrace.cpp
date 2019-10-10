@@ -89,7 +89,7 @@ void InitSeeds(Block*                       b,
             {
                 EndPt p;
                 p.pid = b->init;
-                p.sid = b->init;
+                p.gid = gid;
                 p[0] = i;  p[1] = j;  p[2] = k;
                 b->particles.push_back(p);
                 b->init++;
@@ -183,10 +183,7 @@ void deq_incoming_exchange(Block*                               b,
             vector<EndPt> incoming_endpts;
             cp.dequeue(in[i], incoming_endpts);
             for (size_t j = 0; j < incoming_endpts.size(); j++)
-            {
-                incoming_endpts[j].sid++;
                 b->particles.push_back(incoming_endpts[j]);
-            }
         }
     }
 }
@@ -798,6 +795,12 @@ int main(int argc, char **argv)
     // write trajectory segments for validation
     if (check)
         write_traces(master, assigner, decomposer);
+
+    // debug
+//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+//     {
+//         b->show_geometry(cp);
+//     });
 
     return 0;
 }
