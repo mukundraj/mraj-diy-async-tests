@@ -54,7 +54,7 @@ struct Pt
 bool inside(const Pt& pt, const Bounds bounds)
 {
     for (int i = 0; i < 3; i++)
-        if (pt.coords[i] < bounds.min[i] || pt.coords[i] > bounds.max[i])
+        if (pt.coords[i] < (float)(bounds.min[i]) || pt.coords[i] > (float)(bounds.max[i]))
             return false;
     return true;
 }
@@ -104,7 +104,7 @@ struct Segment
     bool inside(const int lb[3], const int ub[3]) const
         {
             for (int i = 0; i < 3; i++)
-                if (pts.back().coords[i] < lb[i] || pts.back().coords[i] > ub[i])
+                if (pts.back().coords[i] < (float)(lb[i]) || pts.back().coords[i] > (float)(ub[i]))
                     return false;
             return true;
         }

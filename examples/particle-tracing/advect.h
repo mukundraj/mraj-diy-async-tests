@@ -18,7 +18,7 @@
 #include <stdbool.h>
 #include <functional>
 
-bool trace_3D_rk1(
+bool advect_rk1(
         const int   *st,
         const int   *sz,
         const float **vec,
@@ -26,7 +26,7 @@ bool trace_3D_rk1(
         float        h,
         float       *Y);
 
-bool trace_3D_brown(
+bool advect_brown(
         const int   *st,
         const int   *sz,
         const float **vec,

@@ -19,7 +19,7 @@
 #include <cassert>
 #include <string.h>
 
-bool trace_3D_brown(
+bool advect_brown(
         const int *st,      // min. corner of block
         const int *sz,      // size (number of points) in block
         const float **vec,  // vector field
@@ -45,7 +45,7 @@ bool trace_3D_brown(
     return true;
 }
 
-bool trace_3D_rk1(
+bool advect_rk1(
         const int *st,      // min. corner of block
         const int *sz,      // size (number of points) in block
         const float **vec,  // vector field
@@ -86,7 +86,7 @@ bool advect_rk4(
     int num_dims = 3;
 
     float p0[num_dims];
-    memcpy(p0, pt, sizeof(float)*num_dims); 
+    memcpy(p0, pt, num_dims * sizeof(float));
 
     float v[num_dims];
 

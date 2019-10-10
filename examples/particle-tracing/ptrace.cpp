@@ -149,9 +149,7 @@ void trace_particles(Block*                             b,
             vector<int>::iterator it = dests.begin();
             insert_iterator<vector<int> > insert_it(dests, it);
 
-            // switching back to diy's in() function with core bounds (no ghost)
-            diy::in(*l, next_p.coords, insert_it, decomposer.domain, 1);
-//             utl::in(*l, next_p.coords, insert_it, decomposer.domain, 0);
+            utl::in(*l, next_p.coords, insert_it, decomposer.domain, 1);
 
             EndPt out_pt(s);
             out_pt.nsteps = b->particles[i].nsteps;
