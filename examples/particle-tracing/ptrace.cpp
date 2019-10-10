@@ -459,21 +459,21 @@ void print_results(
         fmt::print(stderr, "using iexchange\n");
     else
         fmt::print(stderr, "using exchange\n");
-    fmt::print(stderr, "seed rate:\t\t\t\t{}\n",                    seed_rate);
-    fmt::print(stderr, "nprocs:\t\t\t\t{}\n",                       nprocs);
-    fmt::print(stderr, "nblocks:\t\t\t\t{}\n",                      nblocks);
-    fmt::print(stderr, "ntrials:\t\t\t\t{}\n",                      ntrials);
-    fmt::print(stderr, "mean time (s):\t\t\t{}\n",                  stats.cur_mean_time);
-    fmt::print(stderr, "std dev time (s):\t\t\t{}\n",               ntrials > 1 ? sqrt(stats.cur_std_time / (ntrials - 1)) : 0.0);
+    fmt::print(stderr, "seed rate:                       {}\n", seed_rate);
+    fmt::print(stderr, "nprocs:                          {}\n", nprocs);
+    fmt::print(stderr, "nblocks:                         {}\n", nblocks);
+    fmt::print(stderr, "ntrials:                         {}\n", ntrials);
+    fmt::print(stderr, "mean time (s):                   {}\n", stats.cur_mean_time);
+    fmt::print(stderr, "std dev time (s):                {}\n", ntrials > 1 ? sqrt(stats.cur_std_time / (ntrials - 1)) : 0.0);
     if (IEXCHANGE)
     {
-        fprintf(stderr,    "mean # callbacks:\t\t\t%.0lf\n",            stats.cur_mean_ncalls);
-        fprintf(stderr,    "std dev # callbacks:\t\t%.0lf\n",           ntrials > 1 ? sqrt(stats.cur_std_ncalls / (ntrials - 1)) : 0.0);
+        fprintf(stderr,    "mean # callbacks:                %.0lf\n",  stats.cur_mean_ncalls);
+        fprintf(stderr,    "std dev # callbacks:             %.0lf\n",  ntrials > 1 ? sqrt(stats.cur_std_ncalls / (ntrials - 1)) : 0.0);
     }
     else
     {
-        fmt::print(stderr, "# rounds:\t\t\t\t{}\n",                     nrounds);
-        fmt::print(stderr, "mean callback (advect) time (s):\t{}\n",    stats.cur_mean_callback_time);
+        fmt::print(stderr, "# rounds:                        {}\n",     nrounds);
+        fmt::print(stderr, "mean callback (advect) time (s): {}\n",     stats.cur_mean_callback_time);
     }
     fmt::print(stderr, "---------------------------\n");
 }
