@@ -650,7 +650,8 @@ int main(int argc, char **argv)
     Decomposer::BoolVector       share_face;
     Decomposer::BoolVector       wrap;       // defaults to false
     Decomposer::CoordinateVector ghosts;
-    ghosts.push_back(2); ghosts.push_back(2); ghosts.push_back(2);
+    // TP 10/11/19: turning off ghost
+//     ghosts.push_back(2); ghosts.push_back(2); ghosts.push_back(2);
     share_face.push_back(true); share_face.push_back(true); share_face.push_back(true);
 
     Decomposer decomposer(ndims,
@@ -692,8 +693,8 @@ int main(int argc, char **argv)
         int ncalls = 0;
 
         // debug
-//         if (world.rank() == 0)
-//             fprintf(stderr, "started particle tracing trial %d\n", trial);
+        if (world.rank() == 0)
+            fprintf(stderr, "started particle tracing trial %d\n", trial);
 
         // reset the block particle traces, but leave the vector field intact
         master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
@@ -771,8 +772,8 @@ int main(int argc, char **argv)
         world.barrier();
 
         // debug
-//         if (world.rank() == 0)
-//             fprintf(stderr, "finished particle tracing trial %d\n", trial);
+        if (world.rank() == 0)
+            fprintf(stderr, "finished particle tracing trial %d\n", trial);
 //         master.prof.totals().output(std::cerr);
 
         update_stats(trial, time_start, ncalls, world, stats);

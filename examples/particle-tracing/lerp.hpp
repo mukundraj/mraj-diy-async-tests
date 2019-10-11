@@ -19,16 +19,16 @@
 #include <cmath>
 #include <stdio.h>
 
-// inside includes on the boundary (changed by TP 10/10/19)
+// inside excludes the boundary (changed by TP 10/11/19)
 inline bool inside(int              num_dims,
                    const int*       st,
                    const int*       sz,
                    const float*     p)
 {
     for (int i = 0; i < num_dims; i++)
-        // changed by TP, 10/10/19
+        // changed by TP, 10/11/19
 //         if (p[i] < (float)(st[i]) || p[i] >= (float)(st[i] + sz[i] - 1))
-        if (p[i] < (float)(st[i]) || p[i] > (float)(st[i] + sz[i] - 1))
+        if (p[i] <= (float)(st[i]) || p[i] >= (float)(st[i] + sz[i] - 1))
             return false;
     return true;
 }
