@@ -110,12 +110,12 @@ void trace_particles(Block*                             b,
     const float *vec[3] = {b->vel[0],           // shallow pointer copy
                            b->vel[1],
                            b->vel[2]};
-    const int   st[3]   = {l->core().min[0],
-                           l->core().min[1],
-                           l->core().min[2]};
-    const int   sz[3]   = {l->core().max[0] - l->core().min[0] + 1,
-                           l->core().max[1] - l->core().min[1] + 1,
-                           l->core().max[2] - l->core().min[2] + 1};
+    const int   st[3]   = {l->bounds().min[0],
+                           l->bounds().min[1],
+                           l->bounds().min[2]};
+    const int   sz[3]   = {l->bounds().max[0] - l->bounds().min[0] + 1,
+                           l->bounds().max[1] - l->bounds().min[1] + 1,
+                           l->bounds().max[2] - l->bounds().min[2] + 1};
 
     for (auto i = 0; i < b->particles.size(); i++)
     {

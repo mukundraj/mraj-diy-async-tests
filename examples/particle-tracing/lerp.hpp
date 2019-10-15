@@ -26,9 +26,7 @@ inline bool inside(int              num_dims,
                    const float*     p)
 {
     for (int i = 0; i < num_dims; i++)
-        // changed by TP, 10/11/19
-//         if (p[i] < (float)(st[i]) || p[i] >= (float)(st[i] + sz[i] - 1))
-        if (p[i] <= (float)(st[i]) || p[i] >= (float)(st[i] + sz[i] - 1))
+        if (p[i] < (float)(st[i]) || p[i] >= (float)(st[i] + sz[i] - 1))
             return false;
     return true;
 }
