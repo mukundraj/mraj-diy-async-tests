@@ -124,8 +124,8 @@ void trace_particles(Block*                             b,
         Pt      next_p;                         // coordinates of next end point
         bool    finished = false;
 
-        // trace this segment until it leaves the block core (no ghost)
-        while (advect_rk4(st, sz, vec, cur_p.coords.data(), 0.5, next_p.coords.data()))
+        // trace this segment until it leaves the block
+        while (advect_rk1(st, sz, vec, cur_p.coords.data(), 0.5, next_p.coords.data()))
         {
             b->particles[i].nsteps++;
             s.pts.push_back(next_p);
