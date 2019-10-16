@@ -72,20 +72,15 @@ void InitSeeds(Block*                       b,
     if (synth && coords[0])
         return;
 
-    // seed interior of block (1 step inside of all block core boundaries)
-    // particles at block boundaries are ambiguous as to which block they belong
-    // best to avoid this case when seeding them
-
     // for synthetic data, seed only -x side of the block
-    float epsilon = 1.0e-10;            // a small increment
-    float end = synth ? l->core().min[0] + 1.0 + epsilon: l->core().max[0] - 1.0;
+    float end = synth ? l->core().min[0] + 1.0: l->core().max[0];
 
     // seed the block
-    for (float i = float(l->core().min[0]) + 1.0; i <= end; i += sr)
+    for (float i = float(l->core().min[0]); i < end; i += sr)
     {
-        for (float j = l->core().min[1] + 1.0; j <= l->core().max[1] - 1.0; j += sr)
+        for (float j = l->core().min[1]; j < l->core().max[1]; j += sr)
         {
-            for (float k = l->core().min[2] + 1.0; k <= l->core().max[2] - 1.0; k += sr)
+            for (float k = l->core().min[2]; k < l->core().max[2]; k += sr)
             {
                 EndPt p;
                 p.pid = b->init;
@@ -650,8 +645,7 @@ int main(int argc, char **argv)
     Decomposer::BoolVector       share_face;
     Decomposer::BoolVector       wrap;       // defaults to false
     Decomposer::CoordinateVector ghosts;
-    // TP 10/11/19: turning off ghost
-//     ghosts.push_back(2); ghosts.push_back(2); ghosts.push_back(2);
+    ghosts.push_back(1); ghosts.push_back(1); ghosts.push_back(1);
     share_face.push_back(true); share_face.push_back(true); share_face.push_back(true);
 
     Decomposer decomposer(ndims,
