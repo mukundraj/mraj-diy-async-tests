@@ -594,6 +594,7 @@ int main(int argc, char **argv)
     std::string log_level   = "info";           // logging level
     int ntrials             = 1;                // number of trials
     bool merged_traces      = false;            // traces have already been merged to one block
+    int tot_nsynth          = nblocks;          // total number of synthetic slow velocity regions
 
     // command-line ags
     Options ops(argc, argv);
@@ -605,14 +606,13 @@ int main(int argc, char **argv)
         >> Option('v', "vec-scale",     vec_scale,      "Vector field scaling factor")
         >> Option('h', "hdr-bytes",     hdr_bytes,      "Skip this number bytes header in infile")
         >> Option('r', "max-rounds",    max_rounds,     "Max number of rounds to trace")
-        >> Option('q', "min-q-size",    min_queue_size, "Minimum queue size (bytes) for iexchange")
-        >> Option('o', "max-hold-time", max_hold_time,  "Maximum queue hold time (ms) for iexchange")
         >> Option('x', "synthetic",     synth,          "Generate various synthetic flows")
         >> Option('w', "slow-vel",      slow_vel,       "Slow velocity for synthetic data")
         >> Option('f', "fast-vel",      fast_vel,       "Fast velocity for synthetic data")
         >> Option('c', "check",         check,          "Write out traces for checking")
         >> Option('l', "log",           log_level,      "log level")
         >> Option('n', "trials",        ntrials,        "number of trials")
+        >> Option('o', "nsynth",        tot_nsynth,     "total number of synthetic velocity regions")
         ;
     bool fine = ops >> Present("fine", "Use fine-grain icommunicate");
 
@@ -656,14 +656,17 @@ int main(int argc, char **argv)
                           ghosts);
     if (synth == 1)
     {
-        AddSynthetic1 addsynth(master, slow_vel, fast_vel, decomposer);
+        // DEPRECATE
+//         AddSynthetic1 addsynth(master, slow_vel, fast_vel, decomposer);
+        AddConsistentSynthetic addsynth(master, slow_vel, fast_vel, tot_nsynth);
         decomposer.decompose(world.rank(), assigner, addsynth);
     }
-    else if (synth == 2)
-    {
-        AddSynthetic2 addsynth(master, slow_vel, fast_vel, decomposer);
-        decomposer.decompose(world.rank(), assigner, addsynth);
-    }
+    // DEPRECATE
+//     else if (synth == 2)
+//     {
+//         AddSynthetic2 addsynth(master, slow_vel, fast_vel, decomposer);
+//         decomposer.decompose(world.rank(), assigner, addsynth);
+//     }
     else
     {
         AddAndRead addblock(master, infile.c_str(), world, vec_scale, hdr_bytes);

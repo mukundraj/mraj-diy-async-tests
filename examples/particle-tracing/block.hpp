@@ -390,12 +390,6 @@ void idx2ijk(
         vector<size_t>&         ijk)                // i,j,k,... indices in all dimensions
 {
     int dim = ds.size();
-    if (dim == 1)
-    {
-        ijk[0] = idx;
-        return;
-    }
-
     for (auto i = 0; i < dim; i++)
     {
         if (i < dim - 1)
@@ -405,6 +399,104 @@ void idx2ijk(
     }
 }
 
+// adds a block to the master and sets synthetic vector field
+// synthetic velocities are divided by "regions," which are independent of blocks
+// regions along diagonal of region decomposition are slower than the rest
+struct AddConsistentSynthetic : public AddBlock
+{
+    AddConsistentSynthetic(diy::Master&  m,
+                 const float             slow_vel_,             // slow velocity
+                 const float             fast_vel_,             // fast velocity
+                 const size_t            tot_nslow_regions_) :  // total number of slow regions in global domain
+        AddBlock(m),
+        slow_vel(slow_vel_),
+        fast_vel(fast_vel_),
+        tot_nslow_regions(tot_nslow_regions_) {}
+
+    void operator()(int gid,
+                    const Bounds& core,
+                    const Bounds& bounds,
+                    const Bounds& domain,
+                    const RGLink& link) const
+    {
+        Block* b = AddBlock::operator()(gid, core, bounds, domain, link);
+
+        b->nvecs =                                  // total number of vectors in the block
+                (bounds.max[0] - bounds.min[0] + 1) *
+                (bounds.max[1] - bounds.min[1] + 1) *
+                (bounds.max[2] - bounds.min[2] + 1);
+
+        b->vel[0] = new float[b->nvecs];
+        b->vel[1] = new float[b->nvecs];
+        b->vel[2] = new float[b->nvecs];
+
+        int dim = domain.min.size();
+        vector<size_t>  ijk(dim);                   // coordinates of input point in global domain
+        vector<size_t>  ds(dim, 1);                 // stride for input points in each dimension
+        for (auto i = 1; i < dim; i++)
+            ds[i] = ds[i - 1] * (bounds.max[i - 1] - bounds.min[i - 1] + 1);
+
+        // decompose the domain into regions, independent of blocks
+        Decomposer::BoolVector share_face;
+        for (auto k = 0; k < dim; k++)
+            share_face.push_back(true);
+        Decomposer decomposer(dim, domain, tot_nslow_regions, share_face);
+        vector<int> region_divs(dim);               // number of regions in each dimension
+        decomposer.fill_divisions(region_divs);
+
+        // assign fast or slow velocity to each vector in the block, depending on which region the vector is in
+        for (auto i = 0; i < b->nvecs; i++)
+        {
+            idx2ijk(i, ds, bounds, ijk);            // global coords of the vector (ie, the grid point at the tail of the vector)
+            vector<int> region_gids;                // region gids containing a grid point
+            decomposer.point_to_gids(region_gids, ijk);
+
+            // check if any of the regions containing the grid point is on the diagonal
+            bool slow_region = false;
+            for (auto j = 0; j < region_gids.size(); j++)
+            {
+                vector<int> region_coords;          // coordinates of the region
+                decomposer.gid_to_coords(region_gids[j], region_coords);
+
+                int k;
+                for (k = 1; k < dim; k++)
+                {
+                    if (region_divs[k] == 1)
+                        continue;
+                    if (region_coords[k] != region_coords[k - 1])
+                        break;
+                }
+                if (k == dim)
+                {
+                    slow_region = true;
+                    break;
+                }
+            }
+
+            // set the velocity
+            if (slow_region)
+                b->vel[0][i] = slow_vel;
+            else
+                b->vel[0][i] = fast_vel;
+            b->vel[1][i] = 0.0;
+            b->vel[2][i] = 0.0;
+
+            // debug
+//             if (slow_region)
+//             {
+//                 fmt::print(stderr, "block gid {} ijk [{} {} {}] region gids ", gid, ijk[0], ijk[1], ijk[2]);
+//                 for (auto j = 0; j < region_gids.size(); j++)
+//                     fmt::print(stderr, "{} ", region_gids[j]);
+//                 fmt::print(stderr, " slow_region {}\n", slow_region);
+//             }
+        }
+    }
+
+    float       slow_vel, fast_vel;     // slow and fast velocities
+    size_t      tot_nslow_regions;      // total number of slow regions in the global domain
+};
+
+// DEPRECATE eventually, dataset changes with number of blocks; use AddConsistentSynthetic instead
 // add a block to the master and set synthetic vector field
 // block along diagonal of block coords is slower than the rest
 struct AddSynthetic1 : public AddBlock
@@ -436,14 +528,13 @@ struct AddSynthetic1 : public AddBlock
         b->vel[2] = new float[b->nvecs];
 
         // set synthetic velocity vectors
-        std::vector<int> coords;                            // coordinates of block in each dimension
+        vector<int> coords;                                 // coordinates of block in each dimension
         decomposer.gid_to_coords(gid, coords);
         vector<int> divs(coords.size());                    // number of blocks in each dimension
         decomposer.fill_divisions(divs);
 
         // debug
-//         if (gid == 0)
-//             fmt::print(stderr, "divs = [{} {} {}]\n", divs[0], divs[1], divs[2]);
+//         fmt::print(stderr, "gid {} coords [{} {} {}]\n", gid, coords[0], coords[1], coords[2]);
 
         // one slow diy block along diagonal
         bool slow_block = true;
@@ -478,58 +569,59 @@ struct AddSynthetic1 : public AddBlock
     float       slow_vel, fast_vel;
 };
 
-// add a block to the master and set synthetic vector field
-// velocities vary along a gradient in y direction, with oppsite gradients in blocks adjacent in x direction
-struct AddSynthetic2 : public AddBlock
-{
-    AddSynthetic2(diy::Master&           m,
-                 const float             slow_vel_,
-                 const float             fast_vel_,
-                 const Decomposer&       decomposer_) :
-        AddBlock(m),
-        slow_vel(slow_vel_),
-        fast_vel(fast_vel_),
-        decomposer(decomposer_) {}
-
-    void operator()(int gid,
-                    const Bounds& core,
-                    const Bounds& bounds,
-                    const Bounds& domain,
-                    const RGLink& link) const
-    {
-        Block* b = AddBlock::operator()(gid, core, bounds, domain, link);
-
-        b->nvecs =                                  // total number of vectors in the block
-                (bounds.max[0] - bounds.min[0] + 1) *
-                (bounds.max[1] - bounds.min[1] + 1) *
-                (bounds.max[2] - bounds.min[2] + 1);
-
-        b->vel[0] = new float[b->nvecs];
-        b->vel[1] = new float[b->nvecs];
-        b->vel[2] = new float[b->nvecs];
-
-        // set synthetic velocity vectors
-        // blocks in adjacent x-columns have oppposite direction velocity gradients in y direction
-        std::vector<int> coords;                            // coordinates of block in each dimension
-        decomposer.gid_to_coords(gid, coords);
-
-        for (size_t i = 0; i < b->nvecs; i++)
-        {
-            // we want to create a gradient in the x-velocity based on the y-z coordinates of the vector
-            // velocity is constant across the x direction
-            size_t nx = bounds.max[0] - bounds.min[0] + 1;          // number of vectors in x direction
-            size_t j = i / nx;                                      // index of vector in y-z plane, ignoring x coordinate
-            if (coords[0] % 2 == 0)
-                b->vel[0][i] = slow_vel + (fast_vel - slow_vel) * (float)j / b->nvecs * nx;
-            else
-                b->vel[0][i] = fast_vel - (fast_vel - slow_vel) * (float)j / b->nvecs * nx;
-            b->vel[1][i] = 0.0;
-            b->vel[2][i] = 0.0;
-        }
-    }
-
-    Decomposer  decomposer;
-    float       slow_vel, fast_vel;
-};
+// DEPRECATE
+// // add a block to the master and set synthetic vector field
+// // velocities vary along a gradient in y direction, with oppsite gradients in blocks adjacent in x direction
+// struct AddSynthetic2 : public AddBlock
+// {
+//     AddSynthetic2(diy::Master&           m,
+//                  const float             slow_vel_,
+//                  const float             fast_vel_,
+//                  const Decomposer&       decomposer_) :
+//         AddBlock(m),
+//         slow_vel(slow_vel_),
+//         fast_vel(fast_vel_),
+//         decomposer(decomposer_) {}
+// 
+//     void operator()(int gid,
+//                     const Bounds& core,
+//                     const Bounds& bounds,
+//                     const Bounds& domain,
+//                     const RGLink& link) const
+//     {
+//         Block* b = AddBlock::operator()(gid, core, bounds, domain, link);
+// 
+//         b->nvecs =                                  // total number of vectors in the block
+//                 (bounds.max[0] - bounds.min[0] + 1) *
+//                 (bounds.max[1] - bounds.min[1] + 1) *
+//                 (bounds.max[2] - bounds.min[2] + 1);
+// 
+//         b->vel[0] = new float[b->nvecs];
+//         b->vel[1] = new float[b->nvecs];
+//         b->vel[2] = new float[b->nvecs];
+// 
+//         // set synthetic velocity vectors
+//         // blocks in adjacent x-columns have oppposite direction velocity gradients in y direction
+//         std::vector<int> coords;                            // coordinates of block in each dimension
+//         decomposer.gid_to_coords(gid, coords);
+// 
+//         for (size_t i = 0; i < b->nvecs; i++)
+//         {
+//             // we want to create a gradient in the x-velocity based on the y-z coordinates of the vector
+//             // velocity is constant across the x direction
+//             size_t nx = bounds.max[0] - bounds.min[0] + 1;          // number of vectors in x direction
+//             size_t j = i / nx;                                      // index of vector in y-z plane, ignoring x coordinate
+//             if (coords[0] % 2 == 0)
+//                 b->vel[0][i] = slow_vel + (fast_vel - slow_vel) * (float)j / b->nvecs * nx;
+//             else
+//                 b->vel[0][i] = fast_vel - (fast_vel - slow_vel) * (float)j / b->nvecs * nx;
+//             b->vel[1][i] = 0.0;
+//             b->vel[2][i] = 0.0;
+//         }
+//     }
+// 
+//     Decomposer  decomposer;
+//     float       slow_vel, fast_vel;
+// };
 
 
