@@ -440,6 +440,7 @@ void print_results(
         float           seed_rate,
         int             nprocs,
         int             nblocks,
+        int             tot_nsynth,
         int             ntrials,
         int             nrounds,
         const Stats&    stats)
@@ -452,6 +453,7 @@ void print_results(
     fmt::print(stderr, "seed rate:                       {}\n", seed_rate);
     fmt::print(stderr, "nprocs:                          {}\n", nprocs);
     fmt::print(stderr, "nblocks:                         {}\n", nblocks);
+    fmt::print(stderr, "nsynth:                          {}\n", tot_nsynth);
     fmt::print(stderr, "ntrials:                         {}\n", ntrials);
     fmt::print(stderr, "mean time (s):                   {}\n", stats.cur_mean_time);
     fmt::print(stderr, "std dev time (s):                {}\n", ntrials > 1 ? sqrt(stats.cur_std_time / (ntrials - 1)) : 0.0);
@@ -786,7 +788,7 @@ int main(int argc, char **argv)
     }           // number of trials
 
     if (world.rank() == 0)
-        print_results(seed_rate, world.size(), nblocks, ntrials, nrounds, stats);
+        print_results(seed_rate, world.size(), nblocks, tot_nsynth, ntrials, nrounds, stats);
 
     // write trajectory segments for validation
     if (check)
