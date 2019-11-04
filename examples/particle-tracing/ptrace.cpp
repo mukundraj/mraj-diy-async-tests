@@ -658,17 +658,9 @@ int main(int argc, char **argv)
                           ghosts);
     if (synth == 1)
     {
-        // DEPRECATE
-//         AddSynthetic1 addsynth(master, slow_vel, fast_vel, decomposer);
         AddConsistentSynthetic addsynth(master, slow_vel, fast_vel, tot_nsynth);
         decomposer.decompose(world.rank(), assigner, addsynth);
     }
-    // DEPRECATE
-//     else if (synth == 2)
-//     {
-//         AddSynthetic2 addsynth(master, slow_vel, fast_vel, decomposer);
-//         decomposer.decompose(world.rank(), assigner, addsynth);
-//     }
     else
     {
         AddAndRead addblock(master, infile.c_str(), world, vec_scale, hdr_bytes);
