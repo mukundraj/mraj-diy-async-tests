@@ -631,11 +631,6 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    // debug: check if clocks are synchronized
-    int flag, *get_val;
-    MPI_Comm_get_attr(MPI_COMM_WORLD, MPI_WTIME_IS_GLOBAL, &get_val, &flag);
-    fmt::print(stderr, "MPI_WTIME_IS_GLOBAL = {} flag = {}\n", *get_val, flag);
-
 //     diy::create_logger(log_level);
     diy::FileStorage             storage(prefix);
     diy::Master                  master(world,
@@ -682,6 +677,17 @@ int main(int argc, char **argv)
 
     Stats stats;                        // incremental stats, default initialized to 0's
     int nrounds;
+
+    // check if clocks are synchronized by printing the value of MPI_WTIME_IS_GLOBAL and timing an initial barrier
+    // barrier also has the effect of removing any skew in generating or reading the data
+    // all ranks starting synchronized makes the performance profiles easier to understand
+    int flag, *get_val;
+    MPI_Comm_get_attr(MPI_COMM_WORLD, MPI_WTIME_IS_GLOBAL, &get_val, &flag);
+    if (world.rank() == 0)
+        fmt::print(stderr, "MPI_WTIME_IS_GLOBAL = {} flag = {}\n", *get_val, flag);
+    master.prof << "initial barrier";
+    world.barrier();
+    master.prof >> "initial barrier";
 
     // run the trials
     for (int trial = 0; trial < ntrials; trial++)
