@@ -631,6 +631,11 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    // debug: check if clocks are synchronized
+    int flag, *get_val;
+    MPI_Comm_get_attr(MPI_COMM_WORLD, MPI_WTIME_IS_GLOBAL, &get_val, &flag);
+    fmt::print(stderr, "MPI_WTIME_IS_GLOBAL = {} flag = {}\n", *get_val, flag);
+
 //     diy::create_logger(log_level);
     diy::FileStorage             storage(prefix);
     diy::Master                  master(world,
