@@ -1,19 +1,19 @@
 #!/bin/bash
 
 # number of procs
-num_procs=1
+num_procs=8
 
 # executable
-exe=./ptrace-exchange
+exe=./ptrace-iexchange
 
 # inout file
-infile="/Users/mukundraj/Desktop/work/datasets/nek5000.nc"
+infile="/nfs/proj-tpeterka/hguo/data/nek5000.nc"
 
 # max number of advection steps
 max_steps=1024
 
 # seed rate (seed particles every this many grid points in each dimension)
-sr=1
+sr=64
 
 # domain extents
 mins="0 0 0"
@@ -24,7 +24,7 @@ maxs="511 511 511"
 # --in-memory <num_mem_blocks> --storage <path to out of core storage> --hdr-bytes <byte ofst>
 # --max-rounds <max_rounds>
 
-opts="--blocks 6 --max-rounds 9999 --synthetic 1"
+opts="--blocks 8 --max-rounds 9999 --synthetic 0 --check 0"
 args="$opts $infile $max_steps $sr $mins $maxs"
 mpiexec -n $num_procs $exe $args
 

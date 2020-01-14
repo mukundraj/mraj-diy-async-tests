@@ -26,6 +26,9 @@ typedef diy::DiscreteBounds            Bounds;
 typedef diy::RegularGridLink           RGLink;
 typedef diy::RegularDecomposer<Bounds> Decomposer;
 
+typedef     diy::ContinuousBounds       CBounds;
+typedef diy::RegularDecomposer<CBounds> CDecomposer;
+
 // incremental stats
 // NB, default initialization is 0.0 for all members
 struct Stats
@@ -58,6 +61,17 @@ bool inside(const Pt& pt, const Bounds bounds)
             return false;
     return true;
 }
+
+// continuous domain version of above function
+bool cinside(const Pt& pt, const CBounds bounds)
+{
+    for (int i = 0; i < 3; i++)
+        if (pt.coords[i] < (float)(bounds.min[i]) || pt.coords[i] > (float)(bounds.max[i]))
+            return false;
+    return true;
+}
+
+
 
 // one end point of a particle trace segment
 struct EndPt
@@ -95,6 +109,7 @@ struct Segment
         {
             pid      = p.pid;
             gid      = p.gid;
+            pid      = p.pid;
             Pt pt    { { p[0], p[1], p[2] } };
             pts.push_back(pt);
         }

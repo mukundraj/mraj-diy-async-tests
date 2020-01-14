@@ -41,10 +41,15 @@
 
 #include <pnetcdf.h>
 #include <iomanip>      // std::setprecision
+#include <cmath>
+#include "misc.h"
 
 typedef diy::DiscreteBounds            Bounds;
 typedef diy::RegularGridLink           RGLink;
 typedef diy::RegularDecomposer<Bounds> Decomposer;
+
+typedef     diy::RegularContinuousLink  RCLink;
+typedef     diy::ContinuousBounds       CBounds;
 
 using namespace std;
 
@@ -260,6 +265,159 @@ struct AddBlock
     }
 
     diy::Master& master;
+};
+
+struct CAddBlock
+{
+    CAddBlock(diy::Master &master_) :
+        master(master_)
+    {
+       
+
+    }
+
+    Block* operator()(int gid,
+                      const CBounds& core,
+                      const CBounds& bounds,
+                      const CBounds& domain,
+                      const RCLink& link) const
+    {
+         Block *b       = new Block;
+        RCLink *l      = new RCLink(link);
+        // RCLink *l      = new RCLink(3, cdomain, cdomain);
+        diy::Master &m = const_cast<diy::Master&>(master);
+        m.add(gid, b, l);
+        return b;
+    }
+
+    diy::Master& master;
+};
+
+struct CAddAndRead : public CAddBlock
+{
+    CAddAndRead(diy::Master& m,
+               const char*  infile_,
+               diy::mpi::communicator& world_,
+               const float vec_scale_,
+               const int hdr_bytes_
+               ) :
+        CAddBlock(m),
+        infile(infile_),
+        world(world_),
+        vec_scale(vec_scale_),
+        hdr_bytes(hdr_bytes_) {}
+
+    void operator()(int gid,
+                    const CBounds& core,
+                    const CBounds& bounds,
+                    const CBounds& domain,
+                    const RCLink& link) const
+    {
+        Block* b = CAddBlock::operator()(gid, core, bounds, domain, link);
+    }
+
+    void read_data( Block* b, 
+                    const CBounds& bounds, 
+                    int gid
+                    ) const{
+        MPI_Offset *start, *count;
+        float *data_u=NULL, *data_v=NULL, *data_w=NULL;
+
+        int ncfile, ndims, nvars, ngatts, unlimited;
+        int ret;
+        ret = ncmpi_open(world, infile, NC_NOWRITE, MPI_INFO_NULL,&ncfile);
+        if (ret != NC_NOERR) handle_error(ret, __LINE__);
+
+        ret = ncmpi_inq(ncfile, &ndims, &nvars, &ngatts, &unlimited);
+        if (ret != NC_NOERR) handle_error(ret, __LINE__);
+
+
+        // // reversed order of shape and bounds needed because the sample data file
+        // // is linearized in row-major (C) order
+        // vector<int> shape(3);
+        // for (size_t i = 0; i < 3; i++)
+        //     shape[2 - i] = domain.max[i] - domain.min[i] + 1;
+        //        diy::io::BOV reader(in, shape, hdr_bytes);
+
+        Bounds r_bounds { 3 };
+        r_bounds.min[0] = (int) std::floor(bounds.min[2]);
+        r_bounds.max[0] = (int) std::ceil(bounds.max[2]);
+        r_bounds.min[1] = (int) std::floor(bounds.min[1]);
+        r_bounds.max[1] = (int) std::ceil(bounds.max[1]);
+        r_bounds.min[2] = (int) std::floor(bounds.min[0]);
+        r_bounds.max[2] = (int) std::ceil(bounds.max[0]);
+
+        dprint("rbs %d: (%d %d) (%d %d) (%d %d)", gid, r_bounds.min[0], r_bounds.max[0], r_bounds.min[1], r_bounds.max[1], r_bounds.min[2], r_bounds.max[2]);
+
+
+
+        start = (MPI_Offset*) calloc(ndims, sizeof(MPI_Offset));
+        count = (MPI_Offset*) calloc(ndims, sizeof(MPI_Offset));
+
+        if (ndims==4){
+            count[0] = 1;
+            count[1] = r_bounds.max[0] - r_bounds.min[0]+1;
+            count[2] = r_bounds.max[1] - r_bounds.min[1]+1;
+            count[3] = r_bounds.max[2] - r_bounds.min[2]+1;
+
+            start[0] =  0; start[1] = r_bounds.min[0]; start[2] = r_bounds.min[1]; start[3] = r_bounds.min[2];
+        }else if(ndims==3){
+
+            count[0] = r_bounds.max[0] - r_bounds.min[0]+1;
+            count[1] = r_bounds.max[1] - r_bounds.min[1]+1;
+            count[2] = r_bounds.max[2] - r_bounds.min[2]+1;
+
+            start[0] = r_bounds.min[0]; start[1] = r_bounds.min[1]; start[2] = r_bounds.min[2];
+        }
+
+        //        std::cout<<"counts"<<count[0]<<" "<<count[1]<<" "<<count[2]<<"\n";
+        //        std::cout<<"starts"<<start[0]<<" "<<start[1]<<" "<<start[2]<<"\n";
+
+        size_t nvecs =
+                (r_bounds.max[0] - r_bounds.min[0] + 1) *
+                (r_bounds.max[1] - r_bounds.min[1] + 1) *
+                (r_bounds.max[2] - r_bounds.min[2] + 1);
+        vector<float> values(nvecs * 3); // temporary contiguous buffer of input vector values
+
+        data_u = (float*) calloc(nvecs, sizeof(float));
+        data_v = (float*) calloc(nvecs, sizeof(float));
+        data_w = (float*) calloc(nvecs, sizeof(float));
+        ret = ncmpi_get_vara_float_all(ncfile, 0, start, count, data_u);
+        if (ret != NC_NOERR) handle_error(ret, __LINE__);
+        ret = ncmpi_get_vara_float_all(ncfile, 1, start, count, data_v);
+        if (ret != NC_NOERR) handle_error(ret, __LINE__);
+        ret = ncmpi_get_vara_float_all(ncfile, 2, start, count, data_w);
+        if (ret != NC_NOERR) handle_error(ret, __LINE__);
+
+
+
+        // copy from temp values into block
+        b->vel[0] = new float[nvecs];
+        b->vel[1] = new float[nvecs];
+        b->vel[2] = new float[nvecs];
+        b->nvecs = nvecs;
+        for (size_t i = 0; i < nvecs; i++)
+        {
+
+            b->vel[0][i] = data_u[i] * vec_scale;
+            b->vel[1][i] = data_v[i] * vec_scale;
+            b->vel[2][i] = data_w[i] * vec_scale;
+
+        }
+
+        ret = ncmpi_close(ncfile);
+        free(start);
+        free(count);
+        free(data_u);
+        free(data_v);
+        free(data_w);
+    }
+
+
+    const char*	infile;
+    diy::mpi::communicator world;
+    float vec_scale;
+    int hdr_bytes;
 };
 
 // add a block to the master and read input data
@@ -496,3 +654,27 @@ struct AddConsistentSynthetic : public AddBlock
     size_t      tot_nslow_regions;      // total number of slow regions in the global domain
 };
 
+void print_block(Block* b, const diy::Master::ProxyWithLink& cp, bool verbose)
+{
+  RCLink*  link      = static_cast<RCLink*>(cp.link());
+  fmt::print("{}: [{},{},{}] - [{},{},{}] ({} neighbors): {} points\n",
+                  cp.gid(),
+                  link->bounds().min[0], link->bounds().min[1], link->bounds().min[2],
+                  link->bounds().max[0], link->bounds().max[1], link->bounds().max[2],
+                  link->size(), b->particles.size());
+//   for (int i = 0; i < link->size(); ++i)
+//   {
+//       fmt::print("  ({},{},({},{},{})):",
+//                       link->target(i).gid, link->target(i).proc,
+//                       link->direction(i)[0],
+//                       link->direction(i)[1],
+//                       link->direction(i)[2]);
+//       const CBounds& bounds = link->bounds(i);
+//       fmt::print(" [{},{},{}] - [{},{},{}]\n",
+//               bounds.min[0], bounds.min[1], bounds.min[2],
+//               bounds.max[0], bounds.max[1], bounds.max[2]);
+//   }
+//   if (verbose)
+//     for (size_t i = 0; i < b->points.size(); ++i)
+//       fmt::print("  {} {} {}\n", b->points[i][0], b->points[i][1], b->points[i][2]);
+}

@@ -18,6 +18,7 @@
 #include <stdbool.h>
 #include <cmath>
 #include <stdio.h>
+#include "misc.h"
 
 // inside excludes the boundary (changed by TP 10/11/19)
 inline bool inside(int              num_dims,
@@ -30,6 +31,19 @@ inline bool inside(int              num_dims,
             return false;
     return true;
 }
+
+// inside function for continuous domain
+inline bool cinside(int              num_dims,
+                   const float*       st,
+                   const float*       sz,
+                   const float*     p)
+{
+    for (int i = 0; i < num_dims; i++)
+        if (p[i] < (st[i]) || p[i] >= (st[i] + sz[i]))
+            return false;
+    return true;
+}
+
 
 inline float texel2D(const float*   p,
                      const int*     sz,
@@ -139,6 +153,65 @@ inline bool lerp3D(const float*     pt,         // target point
 
     return true;
 }
+
+// lerp for continuous domain
+inline bool clerp3D(const float*     pt,         // target point
+                   const float*       st,         // min corner of block
+                   const float*       csz,         // number of grid spaces in block
+                   int              num_vars,   // dimensionality
+                   const float**    ptrs,       // input vector field
+                   float*           vars)       // output interpolated vector at target point
+{
+    if (!cinside(3, st, csz, pt)) return false;
+
+    float p[8];                              // one component of velocity at each corner of texel
+    float x  = pt[0] - (float)(std::floor(st[0])),       // physical coords of point relative to min. of block
+          y  = pt[1] - (float)(std::floor(st[1])),
+          z  = pt[2] - (float)(std::floor(st[2]));
+    
+    int   i  = floor(x),                     // indices of min corner of texel containing point
+          j  = floor(y),
+          k  = floor(z);
+    // dprint("clerp %f %f %f, %d %d %d, %f %f", x,y,z, i,j,k, std::floor(st[0]), st[0]);
+    int   i1 =i + 1,                         // indices of max corner of texel containing point
+          j1 =j + 1,
+          k1 =k + 1;
+    float x0 = i, x1 = i1,                   // float version of min, max corner of texel
+          y0 = j, y1 = j1,
+          z0 = k, z1 = k1;
+    int v;                                   // dimension
+
+    int sz[3];
+    sz[0] = (int)(std::ceil(st[0] + csz[0]) - std::floor(st[0]))+1;
+    sz[1] = (int)(std::ceil(st[1] + csz[1]) - std::floor(st[1]))+1;
+    sz[2] = (int)(std::ceil(st[2] + csz[2]) - std::floor(st[2]))+1;
+    // dprint("size %d %d %d, %f %f", sz[0], sz[1], sz[2],  st[0], csz[0]);
+
+    for (v = 0; v < num_vars; v++)
+    {
+        p[0] = texel3D(ptrs[v], sz, i  , j  , k  );
+        p[1] = texel3D(ptrs[v], sz, i1 , j  , k  );
+        p[2] = texel3D(ptrs[v], sz, i  , j1 , k  );
+        p[3] = texel3D(ptrs[v], sz, i1 , j1 , k  );
+        p[4] = texel3D(ptrs[v], sz, i  , j  , k1 );
+        p[5] = texel3D(ptrs[v], sz, i1 , j  , k1 );
+        p[6] = texel3D(ptrs[v], sz, i  , j1 , k1 );
+        p[7] = texel3D(ptrs[v], sz, i1 , j1 , k1 );
+
+        vars[v] =
+            p[0] * (x1 - x) * (y1 - y) * (z1 - z) +
+            p[1] * (x - x0) * (y1 - y) * (z1 - z) +
+            p[2] * (x1 - x) * (y - y0) * (z1 - z) +
+            p[3] * (x - x0) * (y - y0) * (z1 - z) +
+            p[4] * (x1 - x) * (y1 - y) * (z - z0) +
+            p[5] * (x - x0) * (y1 - y) * (z - z0) +
+            p[6] * (x1 - x) * (y - y0) * (z - z0) +
+            p[7] * (x - x0) * (y - y0) * (z - z0);
+    }
+
+    return true;
+}
+
 
 
 inline bool lerp4D(const float*     pt,

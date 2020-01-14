@@ -1,6 +1,6 @@
-add_executable              (ptrace-iexchange ptrace.cpp advect.cpp)
+add_executable              (ptrace-iexchange ptrace.cpp advect.cpp misc.cpp)
 target_compile_definitions  (ptrace-iexchange PUBLIC IEXCHANGE=1)
-add_executable              (ptrace-exchange ptrace.cpp advect.cpp)
+add_executable              (ptrace-exchange ptrace.cpp advect.cpp misc.cpp)
 target_compile_definitions  (ptrace-exchange PUBLIC IEXCHANGE=0)
 
 

@@ -75,6 +75,37 @@ bool advect_rk1(
     return true;
 }
 
+// rk1 for continuous domain
+bool cadvect_rk1(
+        const float *st,      // min. corner of block
+        const float *sz,      // size (number of points) in block
+        const float **vec,  // vector field
+        float *X,           // input point
+        float h,            // step size
+        float *Y = NULL)    // output point if not NULL, otherwise in X
+{
+    if (!cinside(3, st, sz, X)) return false;
+
+    float v[3];
+    if (!clerp3D(X, st, sz, 3, vec, v))
+        return false;
+
+    if (Y)
+    {
+        Y[0] = X[0] + h * v[0];
+        Y[1] = X[1] + h * v[1];
+        Y[2] = X[2] + h * v[2];
+    }
+    else
+    {
+        X[0] = X[0] + h * v[0];
+        X[1] = X[1] + h * v[1];
+        X[2] = X[2] + h * v[2];
+    }
+
+    return true;
+}
+
 bool advect_rk4(
         const int *st,      // min. corner of block
         const int *sz,      // size (number of points) in block

@@ -4,6 +4,7 @@
 #include <math.h>
 #include "diy/link.hpp"
 #include <cstdio>
+#include "misc.h"
 
 // This utility is the same as diy's pick.hpp, but ensures that distance computation is
 // done in double precision even though the bounds are integer
@@ -16,6 +17,7 @@ namespace utl{
         double
         distance(const Bounds& bounds, const Point& p)
         {
+            // fmt::print(stderr,"bnds [{} {}] [{} {}] [{} {}], ({} {} {})\n", bounds.min[0], bounds.max[0], bounds.min[1], bounds.max[1], bounds.min[2], bounds.max[2], p[0], p[1], p[2]);
             double res = 0;
             for (int i = 0; i < p.size(); ++i)
             {
@@ -60,9 +62,14 @@ namespace utl{
 
                 // wrap neighbor bounds, if necessary, otherwise bounds will be unchanged
                 wrap_bounds(neigh_bounds, link.wrap(n), domain);
-
-                if (utl::distance(neigh_bounds, p) == 0)
+                // dprint("nbr: %d dist %f", n, utl::distance(neigh_bounds, p));
+                double dist = utl::distance(neigh_bounds, p);
+                // dprint("nbrid %d, %f", n, dist);
+                if (dist == 0){
                     *out++ = n;
+                    // dprint("infn %d %d", link.size(), n);
+                }
+                    
             } // for all neighbors
         }
 }

@@ -26,6 +26,15 @@ bool advect_rk1(
         float        h,
         float       *Y);
 
+// rk1 for continuous domain
+bool cadvect_rk1(
+        const float   *st,
+        const float   *sz,
+        const float **vec,
+        float       *X,
+        float        h,
+        float       *Y);
+
 bool advect_brown(
         const int   *st,
         const int   *sz,
