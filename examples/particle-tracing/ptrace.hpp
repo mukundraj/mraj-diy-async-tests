@@ -80,6 +80,7 @@ struct EndPt
     Pt   pt;                                 // end pointof the trace
     int  gid;                                // block gid of seed particle (start) of this trace
     int  nsteps;                             // number of steps this particle went so far
+    bool predonly;                        // whether point is advected in prediction round only
 
     const float& operator [](int i) const { return pt.coords[i]; }
     float& operator [](int i)             { return pt.coords[i]; }
@@ -89,6 +90,7 @@ struct EndPt
             pid      = 0;
             gid      = 0;
             nsteps   = 0;
+            predonly = 0;
         }
     EndPt(struct Segment& s);                // extract the end point of a segment
 };

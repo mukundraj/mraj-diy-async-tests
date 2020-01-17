@@ -234,6 +234,7 @@ struct Block
     int                  init, done;         // initial and done flags
     vector<Segment>      segments;           // finished segments of particle traces
     vector<EndPt>        particles;
+    vector<EndPt>        particles_store;    // storage for currently inactive particles (not advected)
 
 #ifdef WITH_VTK
     vtkNew<vtkPoints>    points;             // points to be traced
