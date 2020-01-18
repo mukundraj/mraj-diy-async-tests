@@ -13,7 +13,7 @@ infile="/nfs/proj-tpeterka/hguo/data/nek5000.nc"
 max_steps=1024
 
 # seed rate (seed particles every this many grid points in each dimension)
-sr=8
+sr=16
 
 # domain extents
 mins="0 0 0"
