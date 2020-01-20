@@ -223,6 +223,7 @@ void trace_particles_iex(Block *b,
                          const int max_steps,
                          map<diy::BlockID, vector<EndPt>> &outgoing_endpts,
                          size_t &nsteps,
+                         size_t &ntransfers,
                          bool prediction)
 {
     diy::RegularLink<CBounds> *l = static_cast<diy::RegularLink<CBounds> *>(cp.link());
@@ -287,7 +288,7 @@ void trace_particles_iex(Block *b,
             // dprint("pid: %d, step %d, %f %f %f", b->particles[i].pid, b->particles[i].nsteps, cur_p.coords[0], cur_p.coords[1], cur_p.coords[2]);
         }
         else // find destination of segment endpoint
-        {
+        {   
             vector<int> dests;
             vector<int>::iterator it = dests.begin();
             insert_iterator<vector<int>> insert_it(dests, it);
@@ -299,7 +300,8 @@ void trace_particles_iex(Block *b,
             // out_pt.pid = b->particles[i].pid;
             out_pt.nsteps = b->particles[i].nsteps;
             if (dests.size())
-            {
+            {   
+                ntransfers ++;
                 diy::BlockID bid = l->target(dests[0]); // in case of multiple dests, send to first dest only
 
                 // debug
@@ -406,6 +408,7 @@ void trace_block_iex(Block *b,
                      bool synth,
                      map<diy::BlockID, vector<EndPt>> &outgoing_endpts,
                      size_t &nsteps,
+                     size_t &ntransfers,
                      bool prediction)
 {
     const int gid = cp.gid();
@@ -429,7 +432,7 @@ void trace_block_iex(Block *b,
         {
             deq_incoming_iexchange(b, cp);
             // trace_particles(b, cp, decomposer, max_steps, outgoing_endpts, nsteps);
-            trace_particles_iex(b, cp, cdomain, max_steps, outgoing_endpts, nsteps, prediction);
+            trace_particles_iex(b, cp, cdomain, max_steps, outgoing_endpts, nsteps, ntransfers, prediction);
             b->particles.clear();
         } while (cp.fill_incoming());
     }
@@ -466,11 +469,12 @@ bool trace_block_iexchange(Block *b,
                            const Decomposer::BoolVector share_face,
                            int synth,
                            size_t &nsteps,
+                           size_t &ntransfers,
                            bool prediction)
 {
     map<diy::BlockID, vector<EndPt>> outgoing_endpts; // needed to call trace_particles() but otherwise unused in iexchange
     // trace_block(b, cp, decomposer, assigner, max_steps, seed_rate, share_face, synth, outgoing_endpts, nsteps);
-    trace_block_iex(b, cp, cdomain, assigner, max_steps, seed_rate, share_face, synth, outgoing_endpts, nsteps, prediction);
+    trace_block_iex(b, cp, cdomain, assigner, max_steps, seed_rate, share_face, synth, outgoing_endpts, nsteps, ntransfers, prediction);
     return true;
 }
 
@@ -877,7 +881,7 @@ int main(int argc, char **argv)
 
     Stats stats; // incremental stats, default initialized to 0's
     int nrounds;
-    size_t nsteps = 0;
+    size_t nsteps = 0, ntransfers = 0;
 
     // check if clocks are synchronized by printing the value of MPI_WTIME_IS_GLOBAL and timing an initial barrier
     // barrier also has the effect of removing any skew in generating or reading the data
@@ -1014,6 +1018,7 @@ int main(int argc, char **argv)
                                                      share_face,
                                                      synth,
                                                      nsteps,
+                                                     ntransfers, 
                                                      true);
                     return val;
                 });
@@ -1091,6 +1096,7 @@ int main(int argc, char **argv)
                                                  share_face,
                                                  synth,
                                                  nsteps,
+                                                 ntransfers,
                                                  false);
                 return val;
             });
@@ -1158,6 +1164,8 @@ int main(int argc, char **argv)
         diy::mpi::reduce(world, nsteps, maxsteps_global, 0, diy::mpi::maximum<size_t>());
         size_t minsteps_global;
         diy::mpi::reduce(world, nsteps, minsteps_global, 0, diy::mpi::minimum<size_t>());
+        size_t ntransfers_global;
+        diy::mpi::reduce(world, ntransfers, ntransfers_global, 0, std::plus<size_t>());
 
         float avg = float(nsteps_global) / world.size();
         // float balance = float(maxsteps_global) / avg;
@@ -1167,7 +1175,7 @@ int main(int argc, char **argv)
         {
             fprintf(stderr, "finished particle tracing trial %d\n", trial);
             fprintf(stderr, "predd , %d, nsteps_global , %ld, maxsteps_global , %ld, bal , %f, time_tot , %f, time_overhead, %f, worldsize, %d,minsteps, %ld,\n", prediction, nsteps_global, maxsteps_global, balance, time_total, time_overhead, world.size(), minsteps_global);
-            dprint("times: predrun, %f, kdtree , %f, readdata, %f, filter ,%f, final , %f, prediction, %d, max, %ld, min, %ld, nsteps, %ld, wsize, %d, time_pred, %f, ", time_predrun, time_kdtree, time_readdata, time_filter, time_final, prediction, maxsteps_global, minsteps_global, nsteps_global, world.size(), time_prep);
+            dprint("times: predrun, %f, kdtree , %f, readdata, %f, filter ,%f, final , %f, prediction, %d, max, %ld, min, %ld, nsteps, %ld, wsize, %d, time_pred, %f, tot_transfers, %ld,", time_predrun, time_kdtree, time_readdata, time_filter, time_final, prediction, maxsteps_global, minsteps_global, nsteps_global, world.size(), time_prep, ntransfers_global);
         }
 
         //         master.prof.totals().output(std::cerr);
