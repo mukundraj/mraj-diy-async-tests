@@ -264,7 +264,7 @@ void trace_particles_iex(Block *b,
             }
 
             // if predicting, add copy coordinates to EndPt and add to b->particles_store
-            if (true == true && cinside(cur_p, cdomain))
+            if (prediction == true && cinside(cur_p, cdomain))
             {
                 EndPt way_pt;
                 way_pt[0] = cur_p.coords[0];
