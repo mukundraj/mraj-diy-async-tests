@@ -7,7 +7,8 @@ num_procs=4
 exe=./ptrace-iexchange
 
 # inout file
-infile="/nfs/proj-tpeterka/hguo/data/nek5000.nc"
+# infile="/nfs/proj-tpeterka/hguo/data/nek5000.nc"
+infile="/home/mraj/datasets/nek/nek5000.nc"
 
 # max number of advection steps
 max_steps=1024
@@ -23,43 +24,43 @@ maxs="511 511 511"
 # without prediction
 prediction=0
 
-num_procs=2
-opts="--blocks 2 --max-rounds 9999 --synthetic 0 --check 0"
-args="$opts $infile $max_steps $sr $mins $maxs $prediction"
-mpiexec -n $num_procs $exe $args
+# num_procs=2
+# opts="--blocks 2 --max-rounds 9999 --synthetic 0 --check 0"
+# args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+# mpiexec -n $num_procs $exe $args
 
-num_procs=4
-opts="--blocks 4 --max-rounds 9999 --synthetic 0 --check 0"
-args="$opts $infile $max_steps $sr $mins $maxs $prediction"
-mpiexec -n $num_procs $exe $args 
+# num_procs=4
+# opts="--blocks 4 --max-rounds 9999 --synthetic 0 --check 0"
+# args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+# mpiexec -n $num_procs $exe $args 
 
-num_procs=8
-opts="--blocks 8 --max-rounds 9999 --synthetic 0 --check 0"
-args="$opts $infile $max_steps $sr $mins $maxs $prediction"
-mpiexec -n $num_procs $exe $args 
+# num_procs=8
+# opts="--blocks 8 --max-rounds 9999 --synthetic 0 --check 0"
+# args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+# mpiexec -n $num_procs $exe $args 
 
-num_procs=16
-opts="--blocks 16 --max-rounds 9999 --synthetic 0 --check 0"
-args="$opts $infile $max_steps $sr $mins $maxs $prediction"
-mpiexec -n $num_procs $exe $args 
+# num_procs=16
+# opts="--blocks 16 --max-rounds 9999 --synthetic 0 --check 0"
+# args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+# mpiexec -n $num_procs $exe $args 
 
 # with prediction
 prediction=1
 
-num_procs=2
-opts="--blocks 2 --max-rounds 9999 --synthetic 0 --check 0"
-args="$opts $infile $max_steps $sr $mins $maxs $prediction"
-mpiexec -n $num_procs $exe $args
+# num_procs=2
+# opts="--blocks 2 --max-rounds 9999 --synthetic 0 --check 0"
+# args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+# mpiexec -n $num_procs $exe $args
 
-num_procs=4
-opts="--blocks 4 --max-rounds 9999 --synthetic 0 --check 0"
-args="$opts $infile $max_steps $sr $mins $maxs $prediction"
-mpiexec -n $num_procs $exe $args
+# num_procs=4
+# opts="--blocks 4 --max-rounds 9999 --synthetic 0 --check 0"
+# args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+# mpiexec -n $num_procs $exe $args
 
-num_procs=8
-opts="--blocks 8 --max-rounds 9999 --synthetic 0 --check 0"
-args="$opts $infile $max_steps $sr $mins $maxs $prediction"
-mpiexec -n $num_procs $exe $args
+# num_procs=8
+# opts="--blocks 8 --max-rounds 9999 --synthetic 0 --check 0"
+# args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+# mpiexec -n $num_procs $exe $args
 
 num_procs=16
 opts="--blocks 16 --max-rounds 9999 --synthetic 0 --check 0"

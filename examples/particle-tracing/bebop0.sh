@@ -21,6 +21,8 @@ infile="/home/mraj/datasets/nek/nek5000.nc"
 
 # max number of advection steps
 max_steps=1024
+# max_steps=128
+# max_steps=8
 
 # seed rate (seed particles every this many grid points in each dimension)
 sr=4
@@ -61,12 +63,10 @@ mpiexec -n $num_procs $exe $args
 # opts="--blocks 64 --max-rounds 9999 --synthetic 0 --check 0"
 # args="$opts $infile $max_steps $sr $mins $maxs $prediction"
 # mpiexec -n $num_procs $exe $args
-
 # num_procs=128
 # opts="--blocks 128 --max-rounds 9999 --synthetic 0 --check 0"
 # args="$opts $infile $max_steps $sr $mins $maxs $prediction"
 # mpiexec -n $num_procs $exe $args
-
 # num_procs=256
 # opts="--blocks 256 --max-rounds 9999 --synthetic 0 --check 0"
 # args="$opts $infile $max_steps $sr $mins $maxs $prediction"
