@@ -233,7 +233,7 @@ void deq_incoming_iexchange(Block *b,
 }
 
 // Only for iexchange
-void trace_particles_iex(Block *b,
+bool trace_particles_iex(Block *b,
                          const diy::Master::ProxyWithLink &cp,
                          const CBounds &cdomain,
                          const int max_steps,
@@ -256,14 +256,20 @@ void trace_particles_iex(Block *b,
                          l->bounds().max[2] - l->bounds().min[2]};
 
     
-    for (auto i = 0; i < b->particles.size(); i++)
+    //for (auto i = 0; i < b->particles.size(); i++)
+    if (b->particles.size()>0)
     {
-        Pt &cur_p = b->particles[i].pt; // current end point
-        Segment s(b->particles[i]);     // segment with one point p
+        // Pt &cur_p = b->particles[i].pt; // current end point
+        EndPt par = b->particles.back();
+        b->particles.pop_back();
+        Pt &cur_p = par.pt;
+       
+
+        Segment s(par);     // segment with one point p
         Pt next_p;                      // coordinates of next end point
         bool finished = false;
 
-        if (b->particles[i].pid == 800)
+        if (par.pid == 800)
             dprint("%f %f %f @ %d", cur_p.coords[0], cur_p.coords[1], cur_p.coords[2], cp.gid());
         // trace this segment until it leaves the block
         double time_start = MPI_Wtime();
@@ -271,14 +277,14 @@ void trace_particles_iex(Block *b,
         while (cadvect_rk1(st, sz, vec, cur_p.coords.data(), 0.5, next_p.coords.data()))
         {
             nsteps++;
-            b->particles[i].nsteps++;
+            par.nsteps++;
             s.pts.push_back(next_p);
             cur_p = next_p;
 
-            // if (b->particles[i].pid == 800)
+            // if (par.pid == 800)
             //     dprint("%f %f %f @ %d", cur_p.coords[0], cur_p.coords[1], cur_p.coords[2], cp.gid());
 
-            if (b->particles[i].nsteps >= max_steps)
+            if (par.nsteps >= max_steps)
             {
                 finished = true;
                 break;
@@ -307,7 +313,7 @@ void trace_particles_iex(Block *b,
         if (finished)
         { // this segment is done
             b->done++;
-            // dprint("pid: %d, step %d, %f %f %f", b->particles[i].pid, b->particles[i].nsteps, cur_p.coords[0], cur_p.coords[1], cur_p.coords[2]);
+            // dprint("pid: %d, step %d, %f %f %f", par.pid, par.nsteps, cur_p.coords[0], cur_p.coords[1], cur_p.coords[2]);
         }
         else // find destination of segment endpoint
         {   
@@ -319,8 +325,8 @@ void trace_particles_iex(Block *b,
             utl::in(*l, next_p.coords, insert_it, cdomain, false);
 
             EndPt out_pt(s);
-            // out_pt.pid = b->particles[i].pid;
-            out_pt.nsteps = b->particles[i].nsteps;
+            // out_pt.pid = par.pid;
+            out_pt.nsteps = par.nsteps;
             if (dests.size())
             {   
                 ntransfers ++;
@@ -338,11 +344,16 @@ void trace_particles_iex(Block *b,
         // dprint("BREAKING HERE");
         // break;
 
-        deq_incoming_iexchange(b, cp);
+        // deq_incoming_iexchange(b, cp);
     }
 
     if (prediction==false)
         b->particles_store.clear();
+
+    if (b->particles.size()>0)
+        return false;
+    else
+        return true;
 }
 
 void deq_incoming_exchange(Block *b,
@@ -408,7 +419,7 @@ void trace_block(Block *b,
 }
 
 // will be called by trace_block_iexchange
-void trace_block_iex(Block *b,
+bool trace_block_iex(Block *b,
                      const diy::Master::ProxyWithLink &cp,
                      const CBounds &cdomain,
                      const diy::Assigner &assigner,
@@ -437,16 +448,18 @@ void trace_block_iex(Block *b,
     // if (b->init == 0)
     //     InitSeeds(b, gid, decomposer, l, seed_rate, synth);
     // dequeue incoming points and trace particles
+    bool val = true;
     if (IEXCHANGE)
     {
         do
         {
             deq_incoming_iexchange(b, cp);
             // trace_particles(b, cp, decomposer, max_steps, outgoing_endpts, nsteps);
-            trace_particles_iex(b, cp, cdomain, max_steps, outgoing_endpts, nsteps, ntransfers, prediction, time_trace);
-            b->particles.clear();
+            val = trace_particles_iex(b, cp, cdomain, max_steps, outgoing_endpts, nsteps, ntransfers, prediction, time_trace);
+            // b->particles.clear();
         } while (cp.fill_incoming());
     }
+    return val;
 }
 
 void trace_block_exchange(Block *b,
@@ -486,8 +499,8 @@ bool trace_block_iexchange(Block *b,
 {
     map<diy::BlockID, vector<EndPt>> outgoing_endpts; // needed to call trace_particles() but otherwise unused in iexchange
     // trace_block(b, cp, decomposer, assigner, max_steps, seed_rate, share_face, synth, outgoing_endpts, nsteps);
-    trace_block_iex(b, cp, cdomain, assigner, max_steps, seed_rate, share_face, synth, outgoing_endpts, nsteps, ntransfers, prediction, time_trace);
-    return true;
+    bool val = trace_block_iex(b, cp, cdomain, assigner, max_steps, seed_rate, share_face, synth, outgoing_endpts, nsteps, ntransfers, prediction, time_trace);
+    return val;
 }
 
 // merge traces at the root block
@@ -984,7 +997,6 @@ int main(int argc, char **argv)
             });
 
            
-
             // sample prediction points
             if (prediction)
             {
@@ -1088,9 +1100,9 @@ int main(int argc, char **argv)
                 double time5 = MPI_Wtime();
                 time_filter = time5 - time4;
 
-                master_iex.foreach ([&](Block *b, const diy::Master::ProxyWithLink &icp) -> bool {
-                    dprint("psizes %ld %ld", b->particles.size(), b->particles_store.size());
-                });
+                // master_iex.foreach ([&](Block *b, const diy::Master::ProxyWithLink &icp) -> bool {
+                //     dprint("psizes %ld %ld", b->particles.size(), b->particles_store.size());
+                // });
             }
            
             
