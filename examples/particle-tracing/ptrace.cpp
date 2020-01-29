@@ -65,6 +65,8 @@
 #include <iterator>
 #include <algorithm>
 
+#include "tracer.h"
+
 using namespace std;
 
 void InitSeeds(Block *b,
@@ -338,7 +340,6 @@ void trace_particles_iex(Block *b,
         // dprint("BREAKING HERE");
         // break;
 
-        deq_incoming_iexchange(b, cp);
     }
 
     if (prediction==false)
@@ -794,11 +795,16 @@ int main(int argc, char **argv)
     diy::mpi::environment env(argc, argv);
     diy::mpi::communicator world;
 
+    // int *provided = new int[1];
+    // MPI_Query_thread(provided );
+    // dprint("provided %d %d", *provided, MPI_THREAD_FUNNELED);
+    // exit(0);
+
     using namespace opts;
 
     // defaults
     int nblocks = world.size();     // total number of global blocks
-    int nthreads = 2;               // number of threads diy can use
+    int nthreads = 1;               // number of threads diy can use
     int mblocks = -1;               // number of blocks in memory (-1 = all)
     string prefix = "./DIY.XXXXXX"; // storage of temp files
     int ndims = 3;                  // domain dimensions
@@ -983,8 +989,13 @@ int main(int argc, char **argv)
                 caddblock.read_data(b, l->bounds(), gid);
             });
 
-           
 
+            Tracer tracer;
+
+            tracer.exec();
+
+           
+            /*
             // sample prediction points
             if (prediction)
             {
@@ -1092,6 +1103,8 @@ int main(int argc, char **argv)
                     dprint("psizes %ld %ld", b->particles.size(), b->particles_store.size());
                 });
             }
+
+            */
            
             
             world.barrier();

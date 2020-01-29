@@ -1,4 +1,6 @@
-add_executable              (ptrace-iexchange ptrace.cpp advect.cpp misc.cpp)
+include_directories(./utils)
+
+add_executable              (ptrace-iexchange ptrace.cpp advect.cpp misc.cpp tracer.cpp utils/state_exchanger.cpp utils/async_comm.cpp)
 target_compile_definitions  (ptrace-iexchange PUBLIC IEXCHANGE=1)
 add_executable              (ptrace-exchange ptrace.cpp advect.cpp misc.cpp)
 target_compile_definitions  (ptrace-exchange PUBLIC IEXCHANGE=0)
