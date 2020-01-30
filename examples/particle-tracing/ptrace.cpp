@@ -997,12 +997,13 @@ int main(int argc, char **argv)
             });
 
            
-            // sample prediction points
+            
             if (prediction)
             {
                 world.barrier();
                 double time0 = MPI_Wtime(); 
 
+                // sample prediction points
                 master_iex.foreach ([&](Block *b, const diy::Master::ProxyWithLink &cp) {
                     // std::vector<int> v = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
                     std::random_device rd;
@@ -1015,6 +1016,8 @@ int main(int argc, char **argv)
                     {
                         b->particles[i].predonly = 1;
                     }
+
+                    // init store unpredicted particles?; particles_store used to tag them along 
                     b->particles_store.insert(std::end(b->particles_store), std::begin(b->particles) + pred_size, std::end(b->particles));
                     b->particles.resize(pred_size);
                 });
@@ -1029,7 +1032,7 @@ int main(int argc, char **argv)
                 double time1 = MPI_Wtime();
                 time_prep = time1 - time0;
 
-
+                // advect prediction subset
                 master_iex.iexchange([&](Block *b, const diy::Master::ProxyWithLink &icp) -> bool {
                     ncalls++;
 
@@ -1052,6 +1055,11 @@ int main(int argc, char **argv)
                 world.barrier();
                 double time2 = MPI_Wtime(); 
                 time_predrun = time2 - time1;
+
+                // master_iex.foreach ([&](Block *b, const diy::Master::ProxyWithLink &cp) {
+                //     b->particles.clear();
+                // });
+
 
 
                 // swap b->particles and b->particles_store

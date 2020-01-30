@@ -14,7 +14,7 @@ infile="/home/mraj/datasets/nek/nek5000.nc"
 max_steps=1024
 
 # seed rate (seed particles every this many grid points in each dimension)
-sr=16
+sr=4
 # sr=128
 
 # domain extents
@@ -40,10 +40,15 @@ prediction=0
 # args="$opts $infile $max_steps $sr $mins $maxs $prediction"
 # mpiexec -n $num_procs $exe $args 
 
-num_procs=16
-opts="--blocks 16 --max-rounds 9999 --synthetic 0 --check 0"
-args="$opts $infile $max_steps $sr $mins $maxs $prediction"
-mpiexec -n $num_procs $exe $args 
+# num_procs=16
+# opts="--blocks 16 --max-rounds 9999 --synthetic 0 --check 0"
+# args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+# mpiexec -n $num_procs $exe $args 
+
+# num_procs=32
+# opts="--blocks 32 --max-rounds 9999 --synthetic 0 --check 0"
+# args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+# mpiexec -n $num_procs $exe $args 
 
 # with prediction
 prediction=1
@@ -67,5 +72,10 @@ prediction=1
 # opts="--blocks 16 --max-rounds 9999 --synthetic 0 --check 0"
 # args="$opts $infile $max_steps $sr $mins $maxs $prediction"
 # mpiexec -n $num_procs $exe $args
+
+num_procs=32
+opts="--blocks 32 --max-rounds 9999 --synthetic 0 --check 0"
+args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+mpiexec -n $num_procs $exe $args 
 
 
