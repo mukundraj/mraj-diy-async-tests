@@ -25,7 +25,7 @@ max_steps=1024
 # max_steps=8
 
 # seed rate (seed particles every this many grid points in each dimension)
-sr=4
+sr=8
 
 # domain extents
 mins="0 0 0"

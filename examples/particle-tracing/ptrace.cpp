@@ -167,7 +167,7 @@ void trace_particles(Block *b,
             dprint("%f %f %f @ %d", cur_p.coords[0], cur_p.coords[1], cur_p.coords[2], cp.gid());
 
         // trace this segment until it leaves the block
-        while (advect_rk1(st, sz, vec, cur_p.coords.data(), 0.5, next_p.coords.data()))
+        while (advect_rk1(st, sz, vec, cur_p.coords.data(), 0.05, next_p.coords.data()))
         {
             nsteps++;
             b->particles[i].nsteps++;
@@ -223,13 +223,17 @@ void deq_incoming_iexchange(Block *b,
     for (size_t i = 0; i < l->size(); ++i)
     {
         int nbr_gid = l->target(i).gid;
+        // int cnt = 0;
         while (cp.incoming(nbr_gid))
-        {
+        {   //cnt ++;
             EndPt incoming_endpt;
             cp.dequeue(nbr_gid, incoming_endpt);
             b->particles.push_back(incoming_endpt);
         }
+        // if (cnt>0)
+        //  dprint("psize %d, gid %d", cnt, cp.gid());
     }
+   
 }
 
 // Only for iexchange
@@ -257,6 +261,7 @@ bool trace_particles_iex(Block *b,
 
     
     //for (auto i = 0; i < b->particles.size(); i++)
+    
     if (b->particles.size()>0)
     {
         // Pt &cur_p = b->particles[i].pt; // current end point
@@ -274,7 +279,7 @@ bool trace_particles_iex(Block *b,
         // trace this segment until it leaves the block
         double time_start = MPI_Wtime();
 
-        while (cadvect_rk1(st, sz, vec, cur_p.coords.data(), 0.5, next_p.coords.data()))
+        while (cadvect_rk1(st, sz, vec, cur_p.coords.data(), 0.05, next_p.coords.data()))
         {
             nsteps++;
             par.nsteps++;
@@ -451,13 +456,13 @@ bool trace_block_iex(Block *b,
     bool val = true;
     if (IEXCHANGE)
     {
-        do
-        {
+        // do
+        // {
             deq_incoming_iexchange(b, cp);
             // trace_particles(b, cp, decomposer, max_steps, outgoing_endpts, nsteps);
             val = trace_particles_iex(b, cp, cdomain, max_steps, outgoing_endpts, nsteps, ntransfers, prediction, time_trace);
             // b->particles.clear();
-        } while (cp.fill_incoming());
+        // } while (cp.fill_incoming());
     }
     return val;
 }
@@ -1061,14 +1066,14 @@ int main(int argc, char **argv)
                 // });
 
 
-
                 // swap b->particles and b->particles_store
                 master_iex.foreach ([&](Block *b, const diy::Master::ProxyWithLink &icp) -> bool {
                     b->particles = std::move(b->particles_store);
                 });
 
                
-
+            
+                
                 //rebalance
                 diy::kdtree(master_iex, cassigner, ndims, cdomain, &Block::particles, 2 * 512, false);
 
@@ -1117,6 +1122,7 @@ int main(int argc, char **argv)
             world.barrier();
             double time6 = MPI_Wtime();
 
+
             // post prediction run
             master_iex.iexchange([&](Block *b, const diy::Master::ProxyWithLink &icp) -> bool {
                 ncalls++;
@@ -1135,6 +1141,7 @@ int main(int argc, char **argv)
                                                  time_trace);
                 return val;
             });
+
 
             time_final_loc = MPI_Wtime() - time6;
             world.barrier();
@@ -1194,9 +1201,9 @@ int main(int argc, char **argv)
                 print_exceeded_max_rounds(master);
         }
 
-        size_t nsteps_global;
+        size_t nsteps_global=0;
         diy::mpi::reduce(world, nsteps, nsteps_global, 0, std::plus<size_t>());
-        size_t maxsteps_global;
+        size_t maxsteps_global=0;
         diy::mpi::reduce(world, nsteps, maxsteps_global, 0, diy::mpi::maximum<size_t>());
         size_t minsteps_global;
         diy::mpi::reduce(world, nsteps, minsteps_global, 0, diy::mpi::minimum<size_t>());
