@@ -1,3 +1,6 @@
+#ifndef _PTRACE_H
+#define _PTRACE_H
+
 //---------------------------------------------------------------------------
 //
 // diy2-vtk7 parallel particle advection trace classes
@@ -54,23 +57,10 @@ struct Pt
 
 // whether a point is inside given bounds
 // on the boundary is considered inside
-bool inside(const Pt& pt, const Bounds bounds)
-{
-    for (int i = 0; i < 3; i++)
-        if (pt.coords[i] < (float)(bounds.min[i]) || pt.coords[i] > (float)(bounds.max[i]))
-            return false;
-    return true;
-}
+bool inside(const Pt& pt, const Bounds bounds);
 
 // continuous domain version of above function
-bool cinside(const Pt& pt, const CBounds bounds)
-{
-    for (int i = 0; i < 3; i++)
-        if (pt.coords[i] < (float)(bounds.min[i]) || pt.coords[i] > (float)(bounds.max[i]))
-            return false;
-    return true;
-}
-
+bool cinside(const Pt& pt, const CBounds bounds);
 
 
 // one end point of a particle trace segment
@@ -127,17 +117,6 @@ struct Segment
         }
 };
 
-// following constructor defined out of line because references Segment, which needed
-// to be defined first
-EndPt::
-EndPt(Segment& s)                       // extract the end point of a segment
-{
-    pid = s.pid;
-    gid = s.gid;
-    pt.coords[0] = s.pts.back().coords[0];
-    pt.coords[1] = s.pts.back().coords[1];
-    pt.coords[2] = s.pts.back().coords[2];
-}
 
 // specialize the serialization of a segment
 namespace diy
@@ -163,3 +142,6 @@ namespace diy
             }
     };
 }
+
+
+#endif

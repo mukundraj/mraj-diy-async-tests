@@ -1,3 +1,6 @@
+#ifndef _BLOCK_H
+#define _BLOCK_H
+
 //---------------------------------------------------------------------------
 //
 // diy2-vtk7 parallel particle advection block class
@@ -546,17 +549,8 @@ void idx2ijk(
         size_t                  idx,                // linear cell indx
         const vector<size_t>&   ds,                 // stride of input points
         const Bounds&           bounds,             // block bounds
-        vector<size_t>&         ijk)                // i,j,k,... indices in all dimensions
-{
-    int dim = ds.size();
-    for (auto i = 0; i < dim; i++)
-    {
-        if (i < dim - 1)
-            ijk[i] = bounds.min[i] + (idx % ds[i + 1]) / ds[i];
-        else
-            ijk[i] = bounds.min[i] + idx / ds[i];
-    }
-}
+        vector<size_t>&         ijk);                // i,j,k,... indices in all dimensions
+
 
 // adds a block to the master and sets synthetic vector field
 // synthetic velocities are divided by "regions," which are independent of blocks
@@ -655,27 +649,29 @@ struct AddConsistentSynthetic : public AddBlock
     size_t      tot_nslow_regions;      // total number of slow regions in the global domain
 };
 
-void print_block(Block* b, const diy::Master::ProxyWithLink& cp, bool verbose)
-{
-  RCLink*  link      = static_cast<RCLink*>(cp.link());
-  fmt::print("{}: [{},{},{}] - [{},{},{}] ({} neighbors): {} points\n",
-                  cp.gid(),
-                  link->bounds().min[0], link->bounds().min[1], link->bounds().min[2],
-                  link->bounds().max[0], link->bounds().max[1], link->bounds().max[2],
-                  link->size(), b->particles.size());
-//   for (int i = 0; i < link->size(); ++i)
-//   {
-//       fmt::print("  ({},{},({},{},{})):",
-//                       link->target(i).gid, link->target(i).proc,
-//                       link->direction(i)[0],
-//                       link->direction(i)[1],
-//                       link->direction(i)[2]);
-//       const CBounds& bounds = link->bounds(i);
-//       fmt::print(" [{},{},{}] - [{},{},{}]\n",
-//               bounds.min[0], bounds.min[1], bounds.min[2],
-//               bounds.max[0], bounds.max[1], bounds.max[2]);
-//   }
-//   if (verbose)
-//     for (size_t i = 0; i < b->points.size(); ++i)
-//       fmt::print("  {} {} {}\n", b->points[i][0], b->points[i][1], b->points[i][2]);
-}
+void print_block(Block* b, const diy::Master::ProxyWithLink& cp, bool verbose);
+// {
+//   RCLink*  link      = static_cast<RCLink*>(cp.link());
+//   fmt::print("{}: [{},{},{}] - [{},{},{}] ({} neighbors): {} points\n",
+//                   cp.gid(),
+//                   link->bounds().min[0], link->bounds().min[1], link->bounds().min[2],
+//                   link->bounds().max[0], link->bounds().max[1], link->bounds().max[2],
+//                   link->size(), b->particles.size());
+// //   for (int i = 0; i < link->size(); ++i)
+// //   {
+// //       fmt::print("  ({},{},({},{},{})):",
+// //                       link->target(i).gid, link->target(i).proc,
+// //                       link->direction(i)[0],
+// //                       link->direction(i)[1],
+// //                       link->direction(i)[2]);
+// //       const CBounds& bounds = link->bounds(i);
+// //       fmt::print(" [{},{},{}] - [{},{},{}]\n",
+// //               bounds.min[0], bounds.min[1], bounds.min[2],
+// //               bounds.max[0], bounds.max[1], bounds.max[2]);
+// //   }
+// //   if (verbose)
+// //     for (size_t i = 0; i < b->points.size(); ++i)
+// //       fmt::print("  {} {} {}\n", b->points[i][0], b->points[i][1], b->points[i][2]);
+// }
+
+#endif

@@ -67,6 +67,8 @@
 
 #include "tracer.h"
 
+
+
 using namespace std;
 
 void InitSeeds(Block *b,
@@ -234,117 +236,7 @@ void deq_incoming_iexchange(Block *b,
     }
 }
 
-// Only for iexchange
-void trace_particles_iex(Block *b,
-                         const diy::Master::ProxyWithLink &cp,
-                         const CBounds &cdomain,
-                         const int max_steps,
-                         map<diy::BlockID, vector<EndPt>> &outgoing_endpts,
-                         size_t &nsteps,
-                         size_t &ntransfers,
-                         bool prediction,
-                         double &time_trace)
-{
-    diy::RegularLink<CBounds> *l = static_cast<diy::RegularLink<CBounds> *>(cp.link());
 
-    const float *vec[3] = {b->vel[0], // shallow pointer copy
-                           b->vel[1],
-                           b->vel[2]};
-    const float st[3] = {l->bounds().min[0],
-                         l->bounds().min[1],
-                         l->bounds().min[2]};
-    const float sz[3] = {l->bounds().max[0] - l->bounds().min[0],
-                         l->bounds().max[1] - l->bounds().min[1],
-                         l->bounds().max[2] - l->bounds().min[2]};
-
-    
-    for (auto i = 0; i < b->particles.size(); i++)
-    {
-        Pt &cur_p = b->particles[i].pt; // current end point
-        Segment s(b->particles[i]);     // segment with one point p
-        Pt next_p;                      // coordinates of next end point
-        bool finished = false;
-
-        if (b->particles[i].pid == 800)
-            dprint("%f %f %f @ %d", cur_p.coords[0], cur_p.coords[1], cur_p.coords[2], cp.gid());
-        // trace this segment until it leaves the block
-        double time_start = MPI_Wtime();
-
-        while (cadvect_rk1(st, sz, vec, cur_p.coords.data(), 0.5, next_p.coords.data()))
-        {
-            nsteps++;
-            b->particles[i].nsteps++;
-            s.pts.push_back(next_p);
-            cur_p = next_p;
-
-            // if (b->particles[i].pid == 800)
-            //     dprint("%f %f %f @ %d", cur_p.coords[0], cur_p.coords[1], cur_p.coords[2], cp.gid());
-
-            if (b->particles[i].nsteps >= max_steps)
-            {
-                finished = true;
-                break;
-            }
-
-            // if predicting, add copy coordinates to EndPt and add to b->particles_store
-            if (prediction == true && cinside(cur_p, cdomain) && nsteps % 2 == 0)
-            {   
-                EndPt way_pt;
-                way_pt[0] = cur_p.coords[0];
-                way_pt[1] = cur_p.coords[1];
-                way_pt[2] = cur_p.coords[2];
-                way_pt.predonly = true;
-                b->particles_store.push_back(way_pt);
-            }
-
-        }
-
-        time_trace += MPI_Wtime() - time_start;
-
-        b->segments.push_back(s);
-
-        if (!cinside(next_p, cdomain))
-            finished = true;
-
-        if (finished)
-        { // this segment is done
-            b->done++;
-            // dprint("pid: %d, step %d, %f %f %f", b->particles[i].pid, b->particles[i].nsteps, cur_p.coords[0], cur_p.coords[1], cur_p.coords[2]);
-        }
-        else // find destination of segment endpoint
-        {   
-            vector<int> dests;
-            vector<int>::iterator it = dests.begin();
-            insert_iterator<vector<int>> insert_it(dests, it);
-
-            // utl::in(*l, next_p.coords, insert_it, cdomain, 1);
-            utl::in(*l, next_p.coords, insert_it, cdomain, false);
-
-            EndPt out_pt(s);
-            // out_pt.pid = b->particles[i].pid;
-            out_pt.nsteps = b->particles[i].nsteps;
-            if (dests.size())
-            {   
-                ntransfers ++;
-                diy::BlockID bid = l->target(dests[0]); // in case of multiple dests, send to first dest only
-
-                // debug
-                // fmt::print(stderr, "{}: gid {} enq to gid {}, steps {}, ({}, {}, {})\n", out_pt.pid, cp.gid(), bid.gid,  out_pt.nsteps, out_pt.pt.coords[0], out_pt.pt.coords[1], out_pt.pt.coords[2]);
-
-                if (IEXCHANGE) // enqueuing single endpoint allows fine-grain iexchange if desired
-                    cp.enqueue(bid, out_pt);
-                else
-                    outgoing_endpts[bid].push_back(out_pt); // vector of endpoints
-            }
-        }
-        // dprint("BREAKING HERE");
-        // break;
-
-    }
-
-    if (prediction==false)
-        b->particles_store.clear();
-}
 
 void deq_incoming_exchange(Block *b,
                            const diy::Master::ProxyWithLink &cp)
@@ -421,7 +313,8 @@ void trace_block_iex(Block *b,
                      size_t &nsteps,
                      size_t &ntransfers,
                      bool prediction,
-                     double &time_trace)
+                     double &time_trace,
+                     Tracer &tracer)
 {
     const int gid = cp.gid();
     diy::RegularLink<Bounds> *l = static_cast<diy::RegularLink<Bounds> *>(cp.link());
@@ -444,7 +337,7 @@ void trace_block_iex(Block *b,
         {
             deq_incoming_iexchange(b, cp);
             // trace_particles(b, cp, decomposer, max_steps, outgoing_endpts, nsteps);
-            trace_particles_iex(b, cp, cdomain, max_steps, outgoing_endpts, nsteps, ntransfers, prediction, time_trace);
+            //trace_particles_iex(b, cp, cdomain, max_steps, outgoing_endpts, nsteps, ntransfers, prediction, time_trace, tracer);
             b->particles.clear();
         } while (cp.fill_incoming());
     }
@@ -483,11 +376,12 @@ bool trace_block_iexchange(Block *b,
                            size_t &nsteps,
                            size_t &ntransfers,
                            bool prediction, 
-                           double &time_trace)
+                           double &time_trace, 
+                           Tracer &tracer)
 {
     map<diy::BlockID, vector<EndPt>> outgoing_endpts; // needed to call trace_particles() but otherwise unused in iexchange
     // trace_block(b, cp, decomposer, assigner, max_steps, seed_rate, share_face, synth, outgoing_endpts, nsteps);
-    trace_block_iex(b, cp, cdomain, assigner, max_steps, seed_rate, share_face, synth, outgoing_endpts, nsteps, ntransfers, prediction, time_trace);
+    trace_block_iex(b, cp, cdomain, assigner, max_steps, seed_rate, share_face, synth, outgoing_endpts, nsteps, ntransfers, prediction, time_trace, tracer);
     return true;
 }
 
@@ -982,18 +876,45 @@ int main(int argc, char **argv)
             bool verbose = false;
             master_iex.foreach ([verbose](Block *b, const diy::Master::ProxyWithLink &cp) { print_block(b, cp, verbose); });
 
+            Tracer tracer(world, master, cassigner);
+
             master_iex.foreach ([&](Block *b, const diy::Master::ProxyWithLink &cp) {
                 int gid = cp.gid();
                 RCLink *l = static_cast<RCLink *>(cp.link());
 
                 caddblock.read_data(b, l->bounds(), gid);
+
+                // initializing work as well here
+                tracer.state.add_work(b->particles.size());
             });
 
 
-            Tracer tracer;
+            
 
-            tracer.exec();
+            
 
+            // std::unique_ptr<tracer_message> uptr_msg(new tracer_message());
+            // if (world.rank()==0){
+            //     uptr_msg->dest_gid = 1;
+
+            //     tracer.state.add_work();
+            //     tracer.outgoing_queue.enqueue(std::move(uptr_msg));
+               
+            // }
+            // std::unique_ptr<tracer_message> uptr_msg2(new tracer_message());
+            // if (world.rank()==1){
+            //     uptr_msg2->dest_gid = 2;
+            //     tracer.state.add_work();
+            //     tracer.outgoing_queue.enqueue(std::move(uptr_msg2));
+                
+            // }
+
+            dprint("here0");
+            tracer.exec(master_iex, cdomain, max_steps, nsteps, ntransfers, prediction, time_trace, tracer, cassigner);
+           
+
+
+           
            
             /*
             // sample prediction points
@@ -1110,24 +1031,38 @@ int main(int argc, char **argv)
             world.barrier();
             double time6 = MPI_Wtime();
 
-            // post prediction run
-            master_iex.iexchange([&](Block *b, const diy::Master::ProxyWithLink &icp) -> bool {
-                ncalls++;
+             dprint("here2");
 
-                bool val = trace_block_iexchange(b,
-                                                 icp,
-                                                 cdomain,
-                                                 cassigner,
-                                                 max_steps,
-                                                 seed_rate,
-                                                 share_face,
-                                                 synth,
-                                                 nsteps,
-                                                 ntransfers,
-                                                 false, 
-                                                 time_trace);
-                return val;
-            });
+            // while (!tracer.state.all_done())
+            // {
+                    
+            //     master_iex.foreach ([&](Block *b, const diy::Master::ProxyWithLink &icp) {
+            //         trace_particles_iex(b, icp, cdomain, max_steps, nsteps, ntransfers, prediction, time_trace, tracer, cassigner);
+            //     });
+               
+            // }
+
+            // tracer.tracer_join(); 
+
+            // // post prediction run
+            // master_iex.iexchange([&](Block *b, const diy::Master::ProxyWithLink &icp) -> bool {
+            //     ncalls++;
+
+            //     bool val = trace_block_iexchange(b,
+            //                                      icp,
+            //                                      cdomain,
+            //                                      cassigner,
+            //                                      max_steps,
+            //                                      seed_rate,
+            //                                      share_face,
+            //                                      synth,
+            //                                      nsteps,
+            //                                      ntransfers,
+            //                                      false, 
+            //                                      time_trace,
+            //                                      tracer);
+            //     return val;
+            // });
 
             time_final_loc = MPI_Wtime() - time6;
             world.barrier();
@@ -1258,4 +1193,81 @@ int main(int argc, char **argv)
     //     });
 
     return 0;
+}
+
+// following constructor defined out of line because references Segment, which needed
+// to be defined first
+EndPt::
+EndPt(Segment& s)                       // extract the end point of a segment
+{
+    pid = s.pid;
+    gid = s.gid;
+    pt.coords[0] = s.pts.back().coords[0];
+    pt.coords[1] = s.pts.back().coords[1];
+    pt.coords[2] = s.pts.back().coords[2];
+}
+
+
+// whether a point is inside given bounds
+// on the boundary is considered inside
+bool inside(const Pt& pt, const Bounds bounds)
+{
+    for (int i = 0; i < 3; i++)
+        if (pt.coords[i] < (float)(bounds.min[i]) || pt.coords[i] > (float)(bounds.max[i]))
+            return false;
+    return true;
+}
+
+// continuous domain version of above function
+bool cinside(const Pt& pt, const CBounds bounds)
+{
+    for (int i = 0; i < 3; i++)
+        if (pt.coords[i] < (float)(bounds.min[i]) || pt.coords[i] > (float)(bounds.max[i]))
+            return false;
+    return true;
+}
+
+
+void print_block(Block* b, const diy::Master::ProxyWithLink& cp, bool verbose)
+{
+  RCLink*  link      = static_cast<RCLink*>(cp.link());
+  fmt::print("{}: [{},{},{}] - [{},{},{}] ({} neighbors): {} points\n",
+                  cp.gid(),
+                  link->bounds().min[0], link->bounds().min[1], link->bounds().min[2],
+                  link->bounds().max[0], link->bounds().max[1], link->bounds().max[2],
+                  link->size(), b->particles.size());
+//   for (int i = 0; i < link->size(); ++i)
+//   {
+//       fmt::print("  ({},{},({},{},{})):",
+//                       link->target(i).gid, link->target(i).proc,
+//                       link->direction(i)[0],
+//                       link->direction(i)[1],
+//                       link->direction(i)[2]);
+//       const CBounds& bounds = link->bounds(i);
+//       fmt::print(" [{},{},{}] - [{},{},{}]\n",
+//               bounds.min[0], bounds.min[1], bounds.min[2],
+//               bounds.max[0], bounds.max[1], bounds.max[2]);
+//   }
+//   if (verbose)
+//     for (size_t i = 0; i < b->points.size(); ++i)
+//       fmt::print("  {} {} {}\n", b->points[i][0], b->points[i][1], b->points[i][2]);
+}
+
+
+// convert linear domain point index into (i,j,k,...) multidimensional index
+// number of dimensions is the domain dimensionality
+void idx2ijk(
+        size_t                  idx,                // linear cell indx
+        const vector<size_t>&   ds,                 // stride of input points
+        const Bounds&           bounds,             // block bounds
+        vector<size_t>&         ijk)                // i,j,k,... indices in all dimensions
+{
+    int dim = ds.size();
+    for (auto i = 0; i < dim; i++)
+    {
+        if (i < dim - 1)
+            ijk[i] = bounds.min[i] + (idx % ds[i + 1]) / ds[i];
+        else
+            ijk[i] = bounds.min[i] + idx / ds[i];
+    }
 }

@@ -7,14 +7,14 @@ num_procs=4
 exe=./ptrace-iexchange
 
 # inout file
-# infile="/nfs/proj-tpeterka/hguo/data/nek5000.nc"
-infile="/home/mraj/datasets/nek/nek5000.nc"
+infile="/nfs/proj-tpeterka/hguo/data/nek5000.nc"
+# infile="/home/mraj/datasets/nek/nek5000.nc"
 
 # max number of advection steps
-max_steps=1024
+max_steps=2048
 
 # seed rate (seed particles every this many grid points in each dimension)
-sr=16
+sr=256
 
 # domain extents
 mins="0 0 0"
@@ -62,8 +62,8 @@ prediction=1
 # args="$opts $infile $max_steps $sr $mins $maxs $prediction"
 # mpiexec -n $num_procs $exe $args
 
-num_procs=16
-opts="--blocks 16 --max-rounds 9999 --synthetic 0 --check 0"
+num_procs=2
+opts="--blocks 2 --max-rounds 9999 --synthetic 0 --check 0"
 args="$opts $infile $max_steps $sr $mins $maxs $prediction"
 mpiexec -n $num_procs $exe $args
 
