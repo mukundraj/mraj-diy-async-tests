@@ -79,25 +79,21 @@ void Tracer::exec(diy::Master &master_iex, const CBounds &cdomain,
     worker->join();
 }
 
-// void Tracer::tracer_join(){
-
-//     worker->join();
-// }
 
 void Tracer::exec_comm(size_t &nsteps){
 
-   int ctr = 0;
+//    int ctr = 0;
     // while not finished
     while(!state.all_done())
     {   
-        ctr++;
-        if (ctr==1000000 ){
-            if (state.local_work_>0)
-                dprint("rank %d, lw_ %d, stats %ld, nsteps %ld, senddest [%d %d]", world.rank(), int(state.local_work_), acomm.get_stat_size(), nsteps, acomm.send_dests.front(), acomm.send_dests.back());
+        // ctr++;
+        // if (ctr==1000000 ){
+        //     if (state.local_work_>0)
+        //         dprint("rank %d, lw_ %d, stats %ld, nsteps %ld", world.rank(), int(state.local_work_), acomm.get_stat_size(), nsteps );
             
-            ctr=0;
+        //     ctr=0;
             
-        }
+        // }
         
         
 
@@ -291,9 +287,9 @@ void trace_particles_iex(Block *b,
                 uptr_msg->p[0] = out_pt[0]; uptr_msg->p[1] = out_pt[1]; uptr_msg->p[2] = out_pt[2];
                 uptr_msg->dest_gid = nbr_proc;
                 // dprint("pid: %d (%f %f %f)", uptr_msg->pid , uptr_msg->p[0], uptr_msg->p[1], uptr_msg->p[2]);
-                tracer.mutexx.lock();
+                // tracer.mutexx.lock();
                 tracer.outgoing_queue.enqueue(std::move(uptr_msg));
-                tracer.mutexx.unlock();
+                // tracer.mutexx.unlock();
                 // if (IEXCHANGE) // enqueuing single endpoint allows fine-grain iexchange if desired
                 //     cp.enqueue(bid, out_pt);
                 // else

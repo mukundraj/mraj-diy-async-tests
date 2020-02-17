@@ -31,9 +31,9 @@ void AsyncComm::send_to_a_nbr(std::unique_ptr<tracer_message> &uptr_msg){
         MPI_Request request;
         MPI_Issend(uptr_msg.get(), 1, mpi_tracer_msg, uptr_msg->dest_gid, 0, *world, &request);
 
-        send_dests.push_back(uptr_msg->dest_gid);
+        // send_dests.push_back(uptr_msg->dest_gid);
         // send_dests.push(77);
-        stats.push_back(request);
+        requests.push_back(request);
         // push message buffer to queue
         in_transit_msgs.push_back(std::move(uptr_msg));
 
@@ -66,15 +66,7 @@ bool AsyncComm::check_nbrs_for_incoming(ConcurrentQueue<std::unique_ptr<tracer_m
                         // dprint("flagged in %d", world->rank());
                         std::unique_ptr<tracer_message> msg(new tracer_message());
                         
-                        
                         MPI_Recv( msg.get(), 1, mpi_tracer_msg, nbr_proc, 0, *world, &status );
-
-                        // tracer_message msgg;
-                        // int msgg;
-                        // MPI_Recv( &msgg, 1, MPI_INT, nbr_proc, 0, *world, &status );
-                        
-                        // dprint("Received from %d, pid: %d, nsteps: %d, (%f %f %f)", nbr_proc, msg->pid, msg->nsteps, msg->p[0], msg->p[1], msg->p[2]);
-
                         incoming_queue.enqueue(std::move(msg));
                         flag = 0;
                         MPI_Iprobe( nbr_proc, 0, *world, &flag, &status );
@@ -91,44 +83,14 @@ bool AsyncComm::check_sends_complete(StateExchanger &state){
     bool remaining = false;
     MPI_Status status;
 
-
-
-        // do{
-        //     if (!stats.empty()){
-
-        //         request = stats.front();
-                
-
-        //         int flag = false;
-        //         MPI_Test(&request, &flag, &status);
-        //         // if complete, continue with next on queue
-        //         if (flag){
-                    
-        //             // MPI_Request_free(&request);
-        //             stats.pop();
-        //             in_transit_msgs.pop();
-        //             send_dests.pop();
-        //             state.dec_work();
-
-
-        //             if (stats.empty())
-        //                remaining = false;
-        //             else
-        //                remaining = true;
-        //         }
-               
-        //     }
-
-        // }while(remaining);
-
-        for (size_t i=0; i<stats.size(); i++){
+        for (size_t i=0; i<requests.size(); i++){
 
             int flag;
-            MPI_Test(&stats[i], &flag, &status); 
+            MPI_Test(&requests[i], &flag, &status); 
             if (flag){
-                stats.erase(stats.begin()+i);
+                requests.erase(requests.begin()+i);
                 in_transit_msgs.erase(in_transit_msgs.begin()+i);
-                send_dests.erase(send_dests.begin()+i);
+                // send_dests.erase(send_dests.begin()+i);
                 state.dec_work();
             }
 
@@ -136,7 +98,7 @@ bool AsyncComm::check_sends_complete(StateExchanger &state){
 
 
 
-    if (stats.size()>0)
+    if (requests.size()>0)
         return false;
     else
         return true;
@@ -144,5 +106,5 @@ bool AsyncComm::check_sends_complete(StateExchanger &state){
 
 
 size_t AsyncComm::get_stat_size(){
-      return stats.size();
+      return requests.size();
     }

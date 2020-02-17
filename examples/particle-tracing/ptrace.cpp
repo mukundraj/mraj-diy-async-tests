@@ -885,39 +885,14 @@ int main(int argc, char **argv)
 
                 caddblock.read_data(b, l->bounds(), gid);
 
-                // initializing work as well here
-                tracer.state.add_work(b->particles.size());
+                
             });
 
 
-
             
-
-            // std::unique_ptr<tracer_message> uptr_msg(new tracer_message());
-            // if (world.rank()==0){
-            //     uptr_msg->dest_gid = 1;
-
-            //     tracer.state.add_work();
-            //     tracer.outgoing_queue.enqueue(std::move(uptr_msg));
-               
-            // }
-            // std::unique_ptr<tracer_message> uptr_msg2(new tracer_message());
-            // if (world.rank()==1){
-            //     uptr_msg2->dest_gid = 2;
-            //     tracer.state.add_work();
-            //     tracer.outgoing_queue.enqueue(std::move(uptr_msg2));
-                
-            // }
-            
-
-
-            tracer.exec(master_iex, cdomain, max_steps, nsteps, ntransfers, prediction, time_trace, tracer, cassigner);
-           
-
-
            
            
-            /*
+
             // sample prediction points
             if (prediction)
             {
@@ -938,6 +913,9 @@ int main(int argc, char **argv)
                     }
                     b->particles_store.insert(std::end(b->particles_store), std::begin(b->particles) + pred_size, std::end(b->particles));
                     b->particles.resize(pred_size);
+
+                    // initializing work as well here
+                    tracer.state.add_work(b->particles.size());
                 });
 
                
@@ -950,24 +928,26 @@ int main(int argc, char **argv)
                 double time1 = MPI_Wtime();
                 time_prep = time1 - time0;
 
+                 tracer.exec(master_iex, cdomain, max_steps, nsteps, ntransfers, prediction, time_trace, tracer, cassigner);
 
-                master_iex.iexchange([&](Block *b, const diy::Master::ProxyWithLink &icp) -> bool {
-                    ncalls++;
 
-                    bool val = trace_block_iexchange(b,
-                                                     icp,
-                                                     cdomain,
-                                                     cassigner,
-                                                     max_steps,
-                                                     seed_rate,
-                                                     share_face,
-                                                     synth,
-                                                     nsteps,
-                                                     ntransfers, 
-                                                     true, 
-                                                     time_trace);
-                    return val;
-                });
+                // master_iex.iexchange([&](Block *b, const diy::Master::ProxyWithLink &icp) -> bool {
+                //     ncalls++;
+
+                //     bool val = trace_block_iexchange(b,
+                //                                      icp,
+                //                                      cdomain,
+                //                                      cassigner,
+                //                                      max_steps,
+                //                                      seed_rate,
+                //                                      share_face,
+                //                                      synth,
+                //                                      nsteps,
+                //                                      ntransfers, 
+                //                                      true, 
+                //                                      time_trace);
+                //     return val;
+                // });
 
                 time_predrun_loc = MPI_Wtime() - time1;
                 world.barrier();
@@ -1015,36 +995,38 @@ int main(int argc, char **argv)
                     }
 
                     b->particles = std::move(b->particles_store);
+
+                   
                 });
 
                 world.barrier();
                 double time5 = MPI_Wtime();
                 time_filter = time5 - time4;
 
-                master_iex.foreach ([&](Block *b, const diy::Master::ProxyWithLink &icp) -> bool {
-                    dprint("psizes %ld %ld", b->particles.size(), b->particles_store.size());
-                });
+
             }
 
-            */
+            master_iex.foreach ([&](Block *b, const diy::Master::ProxyWithLink &icp) -> bool {
+
+
+                // initializing work as well here
+                tracer.state.add_work(b->particles.size());
+                dprint("psizes %ld %ld", b->particles.size(), b->particles_store.size());
+            });
+            
+
            
             
             world.barrier();
             double time6 = MPI_Wtime();
 
 
-            // while (!tracer.state.all_done())
-            // {
-                    
-            //     master_iex.foreach ([&](Block *b, const diy::Master::ProxyWithLink &icp) {
-            //         trace_particles_iex(b, icp, cdomain, max_steps, nsteps, ntransfers, prediction, time_trace, tracer, cassigner);
-            //     });
-               
-            // }
-
-            // tracer.tracer_join(); 
+            
 
             // // post prediction run
+            tracer.state.state = 0;
+            tracer.exec(master_iex, cdomain, max_steps, nsteps, ntransfers, prediction, time_trace, tracer, cassigner);
+
             // master_iex.iexchange([&](Block *b, const diy::Master::ProxyWithLink &icp) -> bool {
             //     ncalls++;
 
@@ -1152,10 +1134,10 @@ int main(int argc, char **argv)
         time_trace_avg = time_trace_avg/world.size();
 
 
-        std::vector<int> vals;
-        diy::mpi::gather(world, (int)nsteps, vals, 0);
-        if (world.rank() == 0)
-            pvi(vals);
+        // std::vector<int> vals;
+        // diy::mpi::gather(world, (int)nsteps, vals, 0);
+        // if (world.rank() == 0)
+        //     pvi(vals);
 
 
 
@@ -1242,23 +1224,23 @@ void print_block(Block* b, const diy::Master::ProxyWithLink& cp, bool verbose)
                   link->bounds().min[0], link->bounds().min[1], link->bounds().min[2],
                   link->bounds().max[0], link->bounds().max[1], link->bounds().max[2],
                   link->size(), b->particles.size());
-  for (int i = 0; i < link->size(); ++i)
-  {
+//   for (int i = 0; i < link->size(); ++i)
+//   {
 
-      fmt::print("  {}",
-                      link->target(i).gid);
+//       fmt::print("  {}",
+//                       link->target(i).gid);
 
-    //   fmt::print("target ({},{},({},{},{})):",
-    //                   link->target(i).gid, link->target(i).proc,
-    //                   link->direction(i)[0],
-    //                   link->direction(i)[1],
-    //                   link->direction(i)[2]);
-    //   const CBounds& bounds = link->bounds(i);
-    //   fmt::print(" [{},{},{}] - [{},{},{}]\n",
-    //           bounds.min[0], bounds.min[1], bounds.min[2],
-    //           bounds.max[0], bounds.max[1], bounds.max[2]);
-  }
-  fmt::print(" \n");
+//     //   fmt::print("target ({},{},({},{},{})):",
+//     //                   link->target(i).gid, link->target(i).proc,
+//     //                   link->direction(i)[0],
+//     //                   link->direction(i)[1],
+//     //                   link->direction(i)[2]);
+//     //   const CBounds& bounds = link->bounds(i);
+//     //   fmt::print(" [{},{},{}] - [{},{},{}]\n",
+//     //           bounds.min[0], bounds.min[1], bounds.min[2],
+//     //           bounds.max[0], bounds.max[1], bounds.max[2]);
+//   }
+//   fmt::print(" \n");
 //   if (verbose)
 //     for (size_t i = 0; i < b->points.size(); ++i)
 //       fmt::print("  {} {} {}\n", b->points[i][0], b->points[i][1], b->points[i][2]);
