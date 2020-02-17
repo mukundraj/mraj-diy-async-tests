@@ -3,12 +3,13 @@
 #include "../block.hpp"
 #include "../misc.h"
 #include "../tracer.h"
+#include <mutex>
 
 
 
-void AsyncComm::init(diy::mpi::communicator& world, diy::Master &master, diy::Assigner &assigner){
+void AsyncComm::init(diy::mpi::communicator& world, diy::Master &master_iex, diy::Assigner &assigner){
     this->world = &world;
-    this->master = &master;
+    this->master_iex = &master_iex;
     this->assigner = &assigner;
 
     offsets[0] = offsetof( tracer_message , pid);
@@ -25,72 +26,62 @@ void AsyncComm::init(diy::mpi::communicator& world, diy::Master &master, diy::As
 
 void AsyncComm::send_to_a_nbr(std::unique_ptr<tracer_message> &uptr_msg){
 
-        // int MPI_Issend(const void *buf, int count, MPI_Datatype datatype, int dest, int tag,
-            //    MPI_Comm comm, MPI_Request *request);
-        
-        // tracer_message* msg = new tracer_message(); 
-        // msg->gid = 77;
-        // msg->steps = 99;
-        // msg->efs = 101;
-        // msg->p[0] = 0.2; msg->p[1] = 0.3; msg->p[2] = 0.4;
 
         // push request object handle to queue
         MPI_Request request;
         MPI_Issend(uptr_msg.get(), 1, mpi_tracer_msg, uptr_msg->dest_gid, 0, *world, &request);
-        // tracer_message msgg;
-        // MPI_Issend(&msgg, 1, mpi_tracer_msg, uptr_msg->dest_gid, 0, *world, &request);
-        // int msgg = 1;
-        // MPI_Issend(&msgg, 1, MPI_INT, uptr_msg->dest_gid, 0, *world, &request);
 
-        stats.push(request);
-
+        send_dests.push_back(uptr_msg->dest_gid);
+        // send_dests.push(77);
+        stats.push_back(request);
         // push message buffer to queue
-        // std::unique_ptr<tracer_message> uptr_msg (msg);
-        in_transit_msgs.push(std::move(uptr_msg));
+        in_transit_msgs.push_back(std::move(uptr_msg));
+
+        
         
 }
-bool AsyncComm::check_nbrs_for_incoming(ReaderWriterQueue<std::unique_ptr<tracer_message>> &incoming_queue, StateExchanger& state){
+bool AsyncComm::check_nbrs_for_incoming(ConcurrentQueue<std::unique_ptr<tracer_message>> &incoming_queue, StateExchanger& state){
 
 
     MPI_Status status;
-     
-    
-    master->foreach ([&](Block *b, const diy::Master::ProxyWithLink &cp) {
-        diy::RegularLink<Bounds> *l = static_cast<diy::RegularLink<Bounds> *>(cp.link());
-        for (size_t i = 0; i < l->size(); ++i)
-        {
-            int nbr_gid = l->target(i).gid;
-            int nbr_proc = assigner->rank(nbr_gid);
+
+    for (size_t i=0; i<nbr_procs.size(); i++){
+        
+       
+        int nbr_proc = nbr_procs[i];
 
             
                 int flag=0;
                 MPI_Status status;
                 MPI_Iprobe( nbr_proc, 0, *world, &flag, &status );
-                // if (world->rank()==2){
-                //     // dprint("probe 2 received %d", flag);
-                //     // dprint("nbr rank %d, nbr gid %d", nbr_proc, nbr_gid);
-                // }
+                // if (world->rank() == 14)
+                //     pvi(nbr_procs);
+
+
+                
+               
                 while(flag==1){
+                        
                         state.add_work();
-                        dprint("flagged in %d", world->rank());
+                        // dprint("flagged in %d", world->rank());
                         std::unique_ptr<tracer_message> msg(new tracer_message());
-                        // tracer_message msgg;
+                        
                         
                         MPI_Recv( msg.get(), 1, mpi_tracer_msg, nbr_proc, 0, *world, &status );
 
+                        // tracer_message msgg;
                         // int msgg;
                         // MPI_Recv( &msgg, 1, MPI_INT, nbr_proc, 0, *world, &status );
                         
-                        dprint("Received from %d, pid: %d, nsteps: %d, (%f %f %f)", nbr_proc, msg->pid, msg->nsteps, msg->p[0], msg->p[1], msg->p[2]);
+                        // dprint("Received from %d, pid: %d, nsteps: %d, (%f %f %f)", nbr_proc, msg->pid, msg->nsteps, msg->p[0], msg->p[1], msg->p[2]);
 
                         incoming_queue.enqueue(std::move(msg));
-                        // state.dec_work();
                         flag = 0;
                         MPI_Iprobe( nbr_proc, 0, *world, &flag, &status );
                 }
-        }
 
-     });
+    }
+
 
     return true;
 }
@@ -102,32 +93,56 @@ bool AsyncComm::check_sends_complete(StateExchanger &state){
 
 
 
-        do{
-            if (!stats.empty()){
+        // do{
+        //     if (!stats.empty()){
 
-                request = stats.front();
+        //         request = stats.front();
+                
 
-                int flag = false;
-                MPI_Test(&request, &flag, &status);
-                // if complete, continue with next on queue
-                if (flag){
+        //         int flag = false;
+        //         MPI_Test(&request, &flag, &status);
+        //         // if complete, continue with next on queue
+        //         if (flag){
                     
-                    stats.pop();
-                    in_transit_msgs.pop();
-                    state.dec_work();
+        //             // MPI_Request_free(&request);
+        //             stats.pop();
+        //             in_transit_msgs.pop();
+        //             send_dests.pop();
+        //             state.dec_work();
 
-                    if (stats.empty())
-                       remaining = false;
-                    else
-                       remaining = true;
-                }
+
+        //             if (stats.empty())
+        //                remaining = false;
+        //             else
+        //                remaining = true;
+        //         }
                
+        //     }
+
+        // }while(remaining);
+
+        for (size_t i=0; i<stats.size(); i++){
+
+            int flag;
+            MPI_Test(&stats[i], &flag, &status); 
+            if (flag){
+                stats.erase(stats.begin()+i);
+                in_transit_msgs.erase(in_transit_msgs.begin()+i);
+                send_dests.erase(send_dests.begin()+i);
+                state.dec_work();
             }
 
-        }while(remaining);
+        }
+
+
 
     if (stats.size()>0)
         return false;
     else
         return true;
 }
+
+
+size_t AsyncComm::get_stat_size(){
+      return stats.size();
+    }

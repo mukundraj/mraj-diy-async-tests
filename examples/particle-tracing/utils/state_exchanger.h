@@ -67,7 +67,7 @@ control()
     diy::mpi::optional<diy::mpi::status> ostatus = r.test();
     if (ostatus)
     {
-      dprint("dirty %d all_dirty %d rank %d", int(dirty), int(all_dirty), rank);
+      // dprint("dirty %d all_dirty %d rank %d", int(dirty), int(all_dirty), rank);
       if (all_dirty == 0)    // done
         state = 3;
       else

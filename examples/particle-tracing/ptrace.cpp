@@ -106,6 +106,7 @@ void InitSeeds(Block *b,
             }
         }
     }
+    dprint("b->particles %ld", b->particles.size());
 }
 
 void CInitSeeds(Block *b,
@@ -127,7 +128,7 @@ void CInitSeeds(Block *b,
             for (float k = cdomain.min[2]; k < cdomain.max[2]; k += sr)
             {
                 EndPt p;
-                p.pid = (gid + 1) * 100 + b->init;
+                p.pid = (gid + 1) * 10000 + b->init;
                 p.gid = gid;
                 p[0] = i;
                 p[1] = j;
@@ -876,7 +877,7 @@ int main(int argc, char **argv)
             bool verbose = false;
             master_iex.foreach ([verbose](Block *b, const diy::Master::ProxyWithLink &cp) { print_block(b, cp, verbose); });
 
-            Tracer tracer(world, master, cassigner);
+            Tracer tracer(world, master_iex, cassigner);
 
             master_iex.foreach ([&](Block *b, const diy::Master::ProxyWithLink &cp) {
                 int gid = cp.gid();
@@ -889,7 +890,6 @@ int main(int argc, char **argv)
             });
 
 
-            
 
             
 
@@ -908,8 +908,9 @@ int main(int argc, char **argv)
             //     tracer.outgoing_queue.enqueue(std::move(uptr_msg2));
                 
             // }
+            
 
-            dprint("here0");
+
             tracer.exec(master_iex, cdomain, max_steps, nsteps, ntransfers, prediction, time_trace, tracer, cassigner);
            
 
@@ -1031,7 +1032,6 @@ int main(int argc, char **argv)
             world.barrier();
             double time6 = MPI_Wtime();
 
-             dprint("here2");
 
             // while (!tracer.state.all_done())
             // {
@@ -1152,6 +1152,12 @@ int main(int argc, char **argv)
         time_trace_avg = time_trace_avg/world.size();
 
 
+        std::vector<int> vals;
+        diy::mpi::gather(world, (int)nsteps, vals, 0);
+        if (world.rank() == 0)
+            pvi(vals);
+
+
 
 
         float avg = float(nsteps_global) / world.size();
@@ -1236,18 +1242,23 @@ void print_block(Block* b, const diy::Master::ProxyWithLink& cp, bool verbose)
                   link->bounds().min[0], link->bounds().min[1], link->bounds().min[2],
                   link->bounds().max[0], link->bounds().max[1], link->bounds().max[2],
                   link->size(), b->particles.size());
-//   for (int i = 0; i < link->size(); ++i)
-//   {
-//       fmt::print("  ({},{},({},{},{})):",
-//                       link->target(i).gid, link->target(i).proc,
-//                       link->direction(i)[0],
-//                       link->direction(i)[1],
-//                       link->direction(i)[2]);
-//       const CBounds& bounds = link->bounds(i);
-//       fmt::print(" [{},{},{}] - [{},{},{}]\n",
-//               bounds.min[0], bounds.min[1], bounds.min[2],
-//               bounds.max[0], bounds.max[1], bounds.max[2]);
-//   }
+  for (int i = 0; i < link->size(); ++i)
+  {
+
+      fmt::print("  {}",
+                      link->target(i).gid);
+
+    //   fmt::print("target ({},{},({},{},{})):",
+    //                   link->target(i).gid, link->target(i).proc,
+    //                   link->direction(i)[0],
+    //                   link->direction(i)[1],
+    //                   link->direction(i)[2]);
+    //   const CBounds& bounds = link->bounds(i);
+    //   fmt::print(" [{},{},{}] - [{},{},{}]\n",
+    //           bounds.min[0], bounds.min[1], bounds.min[2],
+    //           bounds.max[0], bounds.max[1], bounds.max[2]);
+  }
+  fmt::print(" \n");
 //   if (verbose)
 //     for (size_t i = 0; i < b->points.size(); ++i)
 //       fmt::print("  {} {} {}\n", b->points[i][0], b->points[i][1], b->points[i][2]);

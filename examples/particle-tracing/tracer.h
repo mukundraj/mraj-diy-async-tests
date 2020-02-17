@@ -2,6 +2,8 @@
 #define TRACER_H
 
 #include "readerwriterqueue.h"
+#include "concurrentqueue.h"
+
 #include "atomicops.h"
 
 #include "async_comm.h"
@@ -16,13 +18,16 @@
 #include "advect.h"
 #include "utils.hpp"
 
+
+#include <mutex>
+
 using namespace moodycamel;
 
 template <typename MsgType>
 struct Worker
 {
 
-    using AtomicQueue = ReaderWriterQueue<MsgType>;
+    using AtomicQueue = ConcurrentQueue<MsgType>;
     AtomicQueue incoming_queue = AtomicQueue(10000);
     AtomicQueue outgoing_queue = AtomicQueue(10000);
 };
@@ -36,6 +41,10 @@ public:
     diy::mpi::communicator world;
     std::unique_ptr<std::thread> worker;
 
+    std::mutex mutexx;
+
+
+
     Tracer(diy::mpi::communicator &world, diy::Master &master, diy::Assigner &assigner);
     void exec(diy::Master &master_iex, const CBounds &cdomain,
                          const int max_steps,
@@ -46,7 +55,7 @@ public:
                          double &time_trace, 
                          Tracer &tracer, 
                          diy::Assigner &cassigner);      // main function
-    void exec_comm(); // handles communication in the main thread
+    void exec_comm(size_t &nsteps); // handles communication in the main thread
     // void tracer_join();
 };
 

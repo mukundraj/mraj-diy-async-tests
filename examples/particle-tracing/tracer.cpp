@@ -5,7 +5,137 @@
 
 
 
+void trace_particles_iex(Block *b,
+                         const diy::Master::ProxyWithLink &cp,
+                         const CBounds &cdomain,
+                         const int max_steps,
+                        //  map<diy::BlockID, vector<EndPt>> &outgoing_endpts,
+                         size_t &nsteps,
+                         size_t &ntransfers,
+                         bool prediction,
+                         double &time_trace, 
+                         Tracer &tracer, 
+                         diy::Assigner &cassigner, 
+                         StateExchanger& state);
 
+
+
+Tracer::Tracer(diy::mpi::communicator& world, diy::Master &master_iex, diy::Assigner &assigner){
+    
+        
+        this->world = world;
+        this->state.rank = world.rank();
+
+         acomm.init(world, master_iex, assigner);
+
+        
+        master_iex.foreach ([&](Block *b, const diy::Master::ProxyWithLink &icp) {
+            diy::RegularLink<CBounds> *l = static_cast<diy::RegularLink<CBounds> *>(icp.link());
+                for (size_t i = 0; i < l->size(); ++i)
+                {   
+                    int nbr_gid = l->target(i).gid;
+                    int nbr_proc = assigner.rank(nbr_gid);
+                    acomm.nbr_procs.push_back(nbr_proc);
+                }
+        });
+
+
+       
+
+}
+
+void Tracer::exec(diy::Master &master_iex, const CBounds &cdomain,
+                         const int max_steps,
+                        //  map<diy::BlockID, vector<EndPt>> &outgoing_endpts,
+                         size_t &nsteps,
+                         size_t &ntransfers,
+                         bool prediction,
+                         double &time_trace, 
+                         Tracer &tracer, 
+                         diy::Assigner &cassigner){
+
+
+    
+    // create worker thread, keeps checking atomic status to decide whether to end
+    worker = std::unique_ptr<std::thread>(new std::thread([&]{
+        while (!state.all_done())
+            {
+                master_iex.foreach ([&](Block *b, const diy::Master::ProxyWithLink &icp) {
+                    trace_particles_iex(b, icp, cdomain, max_steps, nsteps, ntransfers, prediction, time_trace, tracer, cassigner, state);
+                });
+               
+            }
+    }));
+
+
+
+    // enter communication loop, local work count has already been updated before exec was called
+    exec_comm(nsteps);
+
+   
+
+
+    // wait for worker threads to join
+    worker->join();
+}
+
+// void Tracer::tracer_join(){
+
+//     worker->join();
+// }
+
+void Tracer::exec_comm(size_t &nsteps){
+
+   int ctr = 0;
+    // while not finished
+    while(!state.all_done())
+    {   
+        ctr++;
+        if (ctr==1000000 ){
+            if (state.local_work_>0)
+                dprint("rank %d, lw_ %d, stats %ld, nsteps %ld, senddest [%d %d]", world.rank(), int(state.local_work_), acomm.get_stat_size(), nsteps, acomm.send_dests.front(), acomm.send_dests.back());
+            
+            ctr=0;
+            
+        }
+        
+        
+
+        state.control(); // update state exchanger
+        // send out any message to be sent out
+        bool success = false;
+        do{
+
+            std::unique_ptr<tracer_message> uptr_msg;
+            success = outgoing_queue.try_dequeue(uptr_msg); 
+            
+            if (success){
+                // dprint("sending pid %d from %d to %d (%f %f %f)", uptr_msg->pid, world.rank(), uptr_msg->dest_gid, uptr_msg->p[0], uptr_msg->p[1], uptr_msg->p[2]);
+                // state.dirty = true;
+                acomm.send_to_a_nbr(uptr_msg);
+            }
+
+        }while(success);
+
+
+       
+
+        // check for incoming and receive and enqueue if any
+        acomm.check_nbrs_for_incoming(incoming_queue, state);
+
+
+        
+        // check if send messages reached destination and update dirty accordingly
+        bool val = acomm.check_sends_complete(state);
+
+        // if ((int)state.local_work_>0)
+        //     dprint(" %d, all_dirty %d local_work %d", world.rank(), int(state.all_dirty), (int)state.local_work_);
+    }
+
+    
+
+    
+}
 
 // Only for iexchange
 void trace_particles_iex(Block *b,
@@ -18,7 +148,8 @@ void trace_particles_iex(Block *b,
                          bool prediction,
                          double &time_trace, 
                          Tracer &tracer, 
-                         diy::Assigner &cassigner)
+                         diy::Assigner &cassigner, 
+                         StateExchanger& state)
 {
     diy::RegularLink<CBounds> *l = static_cast<diy::RegularLink<CBounds> *>(cp.link());
 
@@ -33,27 +164,45 @@ void trace_particles_iex(Block *b,
                          l->bounds().max[2] - l->bounds().min[2]};
 
     // check if any particles in tracer.incoming_queue and load to b->particles
+    // std::unique_ptr<tracer_message> *uptrptr_msg = tracer.incoming_queue.peek();
+    // while (uptrptr_msg != nullptr)
+    // {
+    //     std::unique_ptr<tracer_message> uptr_msg;
+    //     tracer.mutexx.lock();
+    //     tracer.incoming_queue.try_dequeue(uptr_msg); 
+    //     tracer.mutexx.unlock();
+    //     EndPt in_pt;
+    //     in_pt.pid = uptr_msg->pid;
+    //     in_pt.gid = uptr_msg->gid;
+    //     in_pt.nsteps = uptr_msg->nsteps;
+    //     in_pt.predonly = uptr_msg->predonly;
+    //     // in_pt.efs = uptr_msg->efs;
+    //     in_pt[0] = uptr_msg->p[0]; in_pt[1] = uptr_msg->p[1]; in_pt[2] = uptr_msg->p[2];
 
-    std::unique_ptr<tracer_message> *uptrptr_msg = tracer.incoming_queue.peek();
+    //     b->particles.push_back(in_pt);
+    //     uptrptr_msg = tracer.incoming_queue.peek();
+    //     // dprint("incomeing pid %d, (%f %f %f)", in_pt.pid, in_pt[0], in_pt[1], in_pt[2]);
 
-    while (uptrptr_msg != nullptr)
-    {
-        dprint("incoming");
+    // }
+
+   
+    bool flag = false;
+    do {
+        
         std::unique_ptr<tracer_message> uptr_msg;
-        tracer.incoming_queue.try_dequeue(uptr_msg); 
-        EndPt in_pt;
-        in_pt.pid = uptr_msg->pid;
-        in_pt.gid = uptr_msg->gid;
-        in_pt.nsteps = uptr_msg->nsteps;
-        in_pt.predonly = uptr_msg->predonly;
-        // in_pt.efs = uptr_msg->efs;
-        in_pt[0] = uptr_msg->p[0]; in_pt[1] = uptr_msg->p[1]; in_pt[2] = uptr_msg->p[2];
-
-        b->particles.push_back(in_pt);
-        uptrptr_msg = tracer.incoming_queue.peek();
-        dprint("incomeing pid %d, (%f %f %f)", in_pt.pid, in_pt[1], in_pt[2], in_pt[2]);
-
-    }
+        flag = tracer.incoming_queue.try_dequeue(uptr_msg); 
+        if (flag){
+            EndPt in_pt;
+            in_pt.pid = uptr_msg->pid;
+            in_pt.gid = uptr_msg->gid;
+            in_pt.nsteps = uptr_msg->nsteps;
+            in_pt.predonly = uptr_msg->predonly;
+            // in_pt.efs = uptr_msg->efs;
+            in_pt[0] = uptr_msg->p[0]; in_pt[1] = uptr_msg->p[1]; in_pt[2] = uptr_msg->p[2];
+            b->particles.push_back(in_pt);
+        // dprint("incomeing pid %d, (%f %f %f)", in_pt.pid, in_pt[0], in_pt[1], in_pt[2]);
+        }
+    }while (flag == true);
     
     for (auto i = 0; i < b->particles.size(); i++)
     {
@@ -62,8 +211,8 @@ void trace_particles_iex(Block *b,
         Pt next_p;                      // coordinates of next end point
         bool finished = false;
 
-        if (b->particles[i].pid == 800)
-            dprint("%f %f %f @ %d", cur_p.coords[0], cur_p.coords[1], cur_p.coords[2], cp.gid());
+        if (b->particles[i].pid == 107)
+            dprint("pid:%d [%f %f %f] @ %d", b->particles[i].pid, cur_p.coords[0], cur_p.coords[1], cur_p.coords[2], cp.gid());
         // trace this segment until it leaves the block
         double time_start = MPI_Wtime();
 
@@ -74,8 +223,7 @@ void trace_particles_iex(Block *b,
             s.pts.push_back(next_p);
             cur_p = next_p;
 
-            // if (b->particles[i].pid == 800)
-            //     dprint("%f %f %f @ %d", cur_p.coords[0], cur_p.coords[1], cur_p.coords[2], cp.gid());
+         
 
             if (b->particles[i].nsteps >= max_steps)
             {
@@ -96,6 +244,8 @@ void trace_particles_iex(Block *b,
 
         }
 
+           
+
         time_trace += MPI_Wtime() - time_start;
 
         b->segments.push_back(s);
@@ -106,7 +256,7 @@ void trace_particles_iex(Block *b,
         if (finished)
         { // this segment is done
             b->done++;
-            dprint("pid: %d, step %d, %f %f %f", b->particles[i].pid, b->particles[i].nsteps, cur_p.coords[0], cur_p.coords[1], cur_p.coords[2]);
+            // dprint("pid: %d, step %d, %f %f %f", b->particles[i].pid, b->particles[i].nsteps, cur_p.coords[0], cur_p.coords[1], cur_p.coords[2]);
             tracer.state.dec_work();
         }
         else // find destination of segment endpoint
@@ -118,16 +268,19 @@ void trace_particles_iex(Block *b,
             // utl::in(*l, next_p.coords, insert_it, cdomain, 1);
             utl::in(*l, next_p.coords, insert_it, cdomain, false);
 
+            if (b->particles[i].pid == 107)
+                dprint("pid:%d [%f %f %f] @ %d, %ld", b->particles[i].pid, cur_p.coords[0], cur_p.coords[1], cur_p.coords[2], cp.gid(), dests.size());;
+
             EndPt out_pt(s);
             // out_pt.pid = b->particles[i].pid;
             out_pt.nsteps = b->particles[i].nsteps;
-            if (dests.size())
+            if (dests.size() )
             {   
                 ntransfers ++;
                 diy::BlockID bid = l->target(dests[0]); // in case of multiple dests, send to first dest only
 
                 // debug
-                fmt::print(stderr, "{}: gid {} enq to gid {}, steps {}, ({}, {}, {})\n", out_pt.pid, cp.gid(), bid.gid,  out_pt.nsteps, out_pt.pt.coords[0], out_pt.pt.coords[1], out_pt.pt.coords[2]);
+                // fmt::print(stderr, "{}: gid {} enq to gid {}, steps {}, ({}, {}, {})\n", out_pt.pid, cp.gid(), bid.gid,  out_pt.nsteps, out_pt.pt.coords[0], out_pt.pt.coords[1], out_pt.pt.coords[2]);
 
                 int nbr_proc = cassigner.rank(bid.gid);
                 std::unique_ptr<tracer_message> uptr_msg(new tracer_message()); 
@@ -138,13 +291,15 @@ void trace_particles_iex(Block *b,
                 uptr_msg->p[0] = out_pt[0]; uptr_msg->p[1] = out_pt[1]; uptr_msg->p[2] = out_pt[2];
                 uptr_msg->dest_gid = nbr_proc;
                 // dprint("pid: %d (%f %f %f)", uptr_msg->pid , uptr_msg->p[0], uptr_msg->p[1], uptr_msg->p[2]);
-
+                tracer.mutexx.lock();
                 tracer.outgoing_queue.enqueue(std::move(uptr_msg));
-
+                tracer.mutexx.unlock();
                 // if (IEXCHANGE) // enqueuing single endpoint allows fine-grain iexchange if desired
                 //     cp.enqueue(bid, out_pt);
                 // else
                 //     outgoing_endpts[bid].push_back(out_pt); // vector of endpoints
+            }else{
+                state.dec_work(); // particle jumping to non neighbor disappears
             }
         }
         // dprint("BREAKING HERE");
@@ -155,94 +310,4 @@ void trace_particles_iex(Block *b,
 
     if (prediction==false)
         b->particles_store.clear();
-}
-
-Tracer::Tracer(diy::mpi::communicator& world, diy::Master &master, diy::Assigner &assigner){
-    
-        acomm.init(world, master, assigner);
-        this->world = world;
-        this->state.rank = world.rank();
-}
-
-void Tracer::exec(diy::Master &master_iex, const CBounds &cdomain,
-                         const int max_steps,
-                        //  map<diy::BlockID, vector<EndPt>> &outgoing_endpts,
-                         size_t &nsteps,
-                         size_t &ntransfers,
-                         bool prediction,
-                         double &time_trace, 
-                         Tracer &tracer, 
-                         diy::Assigner &cassigner){
-
-
-    
-    // create worker thread, keeps checking atomic status to decide whether to end
-    worker = std::unique_ptr<std::thread>(new std::thread([&]{
-        while (!state.all_done())
-            {
-                    
-                master_iex.foreach ([&](Block *b, const diy::Master::ProxyWithLink &icp) {
-                    trace_particles_iex(b, icp, cdomain, max_steps, nsteps, ntransfers, prediction, time_trace, tracer, cassigner);
-                });
-               
-            }
-    }));
-
-    dprint("worker working");
-
-    // enter communication loop, local work count has already been updated
-    exec_comm();
-
-   
-
-
-    // wait for worker threads to join
-    worker->join();
-}
-
-// void Tracer::tracer_join(){
-
-//     worker->join();
-// }
-
-void Tracer::exec_comm(){
-
-    // while not finished
-    while(!state.all_done())
-    {   
-        state.control(); // update state exchanger
-
-        // send out any message to be sent out
-        bool success = false;
-        do{
-
-            std::unique_ptr<tracer_message> uptr_msg;
-            success = outgoing_queue.try_dequeue(uptr_msg); 
-            
-            if (success){
-                dprint("sending from %d to %d", world.rank(), uptr_msg->dest_gid);
-                // state.dirty = true;
-                acomm.send_to_a_nbr(uptr_msg);
-            }
-        }while(success);
-        
-        // check for incoming and receive and enqueue if any
-        acomm.check_nbrs_for_incoming(incoming_queue, state);
-
-            // success = false;
-            // do{
-            //     tracer_message msg;
-            //     success = incoming_queue.try_dequeue(uptr_msg);
-
-            // }while(success);
-
-
-        // check if send messages reached destination and update dirty accordingly
-        bool val = acomm.check_sends_complete(state);
-            // state.dirty = false;
-        // if (val==false)
-        //     dprint("sends comple %d, rank %d", val, world.rank());
-    }
-
-    
 }
