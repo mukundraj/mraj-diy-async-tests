@@ -43,25 +43,24 @@ void AsyncComm::send_to_a_nbr(std::unique_ptr<tracer_message> &uptr_msg){
 bool AsyncComm::check_nbrs_for_incoming(ConcurrentQueue<std::unique_ptr<tracer_message>> &incoming_queue, StateExchanger& state){
 
 
-    MPI_Status status;
+    // MPI_Status status;
 
-    for (size_t i=0; i<nbr_procs.size(); i++){
+    // for (size_t i=0; i<nbr_procs.size(); i++){
         
        
-        int nbr_proc = nbr_procs[i];
+                int nbr_proc; // = nbr_procs[i];
 
             
                 int flag=0;
                 MPI_Status status;
-                MPI_Iprobe( nbr_proc, 0, *world, &flag, &status );
-                // if (world->rank() == 14)
-                //     pvi(nbr_procs);
+                // MPI_Iprobe( nbr_proc, 0, *world, &flag, &status );
+                MPI_Iprobe( MPI_ANY_SOURCE, 0, *world, &flag, &status );
 
 
                 
                
                 while(flag==1){
-                        
+                        nbr_proc = status.MPI_SOURCE;
                         state.add_work();
                         // dprint("flagged in %d", world->rank());
                         std::unique_ptr<tracer_message> msg(new tracer_message());
@@ -72,7 +71,7 @@ bool AsyncComm::check_nbrs_for_incoming(ConcurrentQueue<std::unique_ptr<tracer_m
                         MPI_Iprobe( nbr_proc, 0, *world, &flag, &status );
                 }
 
-    }
+    // }
 
 
     return true;

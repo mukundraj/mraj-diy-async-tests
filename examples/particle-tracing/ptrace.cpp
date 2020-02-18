@@ -1152,6 +1152,8 @@ int main(int argc, char **argv)
             fprintf(stderr, "predd , %d, nsteps_global , %ld, maxsteps_global , %ld, bal , %f, time_tot , %f, time_overhead, %f, worldsize, %d,minsteps, %ld,\n", prediction, nsteps_global, maxsteps_global, balance, time_total, time_overhead, world.size(), minsteps_global);
             dprint("times: predrun, %f, kdtree , %f, readdata, %f, filter ,%f, final , %f, prediction, %d, max, %ld, min, %ld, nsteps, %ld, wsize, %d, time_pred, %f, tot_transfers, %ld, prdrun_local(max avg), %f, %f, fin_local (max avg), %f, %f, max_steps, %d, time_trace_max, %f, time_trace_avg, %f, ", time_predrun, time_kdtree, time_readdata, time_filter, time_final, prediction, maxsteps_global, minsteps_global, nsteps_global, world.size(), time_prep, ntransfers_global, time_predrun_loc_max, time_predrun_loc_avg, time_fin_loc_max, time_fin_loc_avg, max_steps, time_trace_max, time_trace_avg);
         }
+        dprint("comm cpu %d", sched_getcpu());
+
 
         //         master.prof.totals().output(std::cerr);
 

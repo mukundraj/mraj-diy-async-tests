@@ -4,7 +4,7 @@
 num_procs=4
 
 # executable
-exe=./ptrace-iexchange
+exe=./ptrace-exchange
 
 # inout file
 infile="/nfs/proj-tpeterka/hguo/data/nek5000.nc"
@@ -14,7 +14,7 @@ infile="/nfs/proj-tpeterka/hguo/data/nek5000.nc"
 max_steps=2048
 
 # seed rate (seed particles every this many grid points in each dimension)
-sr=4
+sr=64
 
 # domain extents
 mins="0 0 0"
@@ -29,10 +29,10 @@ prediction=0
 # args="$opts $infile $max_steps $sr $mins $maxs $prediction"
 # mpiexec -n $num_procs $exe $args
 
-# num_procs=4
-# opts="--blocks 4 --max-rounds 9999 --synthetic 0 --check 0"
-# args="$opts $infile $max_steps $sr $mins $maxs $prediction"
-# mpiexec -n $num_procs $exe $args 
+num_procs=4
+opts="--blocks 4 --max-rounds 9999 --synthetic 0 --check 0"
+args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+mpiexec -n $num_procs $exe $args 
 
 # num_procs=8
 # opts="--blocks 8 --max-rounds 9999 --synthetic 0 --check 0"
@@ -72,9 +72,9 @@ prediction=1
 # args="$opts $infile $max_steps $sr $mins $maxs $prediction"
 # mpiexec -n $num_procs $exe $args
 
-num_procs=32
-opts="--blocks 32 --max-rounds 9999 --synthetic 0 --check 0"
-args="$opts $infile $max_steps $sr $mins $maxs $prediction"
-mpiexec -n $num_procs $exe $args
+# num_procs=32
+# opts="--blocks 32 --max-rounds 9999 --synthetic 0 --check 0"
+# args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+# mpiexec -n $num_procs $exe $args
 
 

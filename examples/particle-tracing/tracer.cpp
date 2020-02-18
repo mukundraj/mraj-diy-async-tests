@@ -58,6 +58,7 @@ void Tracer::exec(diy::Master &master_iex, const CBounds &cdomain,
     
     // create worker thread, keeps checking atomic status to decide whether to end
     worker = std::unique_ptr<std::thread>(new std::thread([&]{
+
         while (!state.all_done())
             {
                 master_iex.foreach ([&](Block *b, const diy::Master::ProxyWithLink &icp) {
@@ -65,6 +66,7 @@ void Tracer::exec(diy::Master &master_iex, const CBounds &cdomain,
                 });
                
             }
+        dprint("worker cpu %d", sched_getcpu());
     }));
 
 
