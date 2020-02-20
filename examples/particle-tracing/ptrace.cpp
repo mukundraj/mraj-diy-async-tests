@@ -1276,7 +1276,7 @@ int main(int argc, char **argv)
             dprint("times: predrun, %f, kdtree , %f, readdata, %f, filter ,%f, final , %f, prediction, %d, max, %ld, min, %ld, nsteps, %ld, wsize, %d, time_pred, %f, tot_transfers, %ld, prdrun_local(max avg), %f, %f, fin_local (max avg), %f, %f, max_steps, %d, time_trace_max, %f, time_trace_avg, %f, ", time_predrun, time_kdtree, time_readdata, time_filter, time_final, prediction, maxsteps_global, minsteps_global, nsteps_global, world.size(), time_prep, ntransfers_global, time_predrun_loc_max, time_predrun_loc_avg, time_fin_loc_max, time_fin_loc_avg, max_steps, time_trace_max, time_trace_avg);
 
             for (size_t i=0; i<all_steps_per_interval.size(); i++)
-                {   fprintf(stderr, "ganttrank, %d, ", i);
+                {   fprintf(stderr, "ganttrank, %d, p, %d, ws, %d, ", i, prediction, world.size());
                     for (size_t j=0; j<all_steps_per_interval[i].size(); j++){
                         fprintf(stderr, "%ld, ", all_steps_per_interval[i][j]);
                     }
