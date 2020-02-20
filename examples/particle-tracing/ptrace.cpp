@@ -912,6 +912,9 @@ int main(int argc, char **argv)
     Stats stats; // incremental stats, default initialized to 0's
     int nrounds;
     size_t nsteps = 0, ntransfers = 0;
+    std::vector<size_t> steps_per_interval;
+    std::atomic<bool> done{false};
+    std::mutex mutex;
 
     // check if clocks are synchronized by printing the value of MPI_WTIME_IS_GLOBAL and timing an initial barrier
     // barrier also has the effect of removing any skew in generating or reading the data
@@ -943,6 +946,8 @@ int main(int argc, char **argv)
 
         world.barrier();
         double time_start = MPI_Wtime();
+
+
 
         if (IEXCHANGE)
         {
@@ -1001,7 +1006,22 @@ int main(int argc, char **argv)
                 caddblock.read_data(b, l->bounds(), gid);
             });
 
-           
+            // for gantt chart
+            std::thread steps_ctr([&]{
+
+                while(!done){
+
+                        std::this_thread::sleep_for( std::chrono::milliseconds(1000));
+                        {
+                             std::lock_guard<std::mutex> guard(mutex);
+                             steps_per_interval.push_back(nsteps);
+
+                        }
+                }
+                
+            });
+
+
             
             if (prediction)
             {
@@ -1148,6 +1168,12 @@ int main(int argc, char **argv)
             double time7 = MPI_Wtime();
 
             time_final = time7 - time6;
+
+
+            done = true;
+            steps_ctr.join();
+
+
         }
         else // exchange
         {
@@ -1201,6 +1227,9 @@ int main(int argc, char **argv)
                 print_exceeded_max_rounds(master);
         }
 
+
+        
+
         size_t nsteps_global=0;
         diy::mpi::reduce(world, nsteps, nsteps_global, 0, std::plus<size_t>());
         size_t maxsteps_global=0;
@@ -1230,6 +1259,9 @@ int main(int argc, char **argv)
         diy::mpi::reduce(world, time_trace, time_trace_avg, 0, std::plus<double>());
         time_trace_avg = time_trace_avg/world.size();
 
+        std::vector<std::vector<size_t>> all_steps_per_interval;
+        diy::mpi::gather (world, steps_per_interval, all_steps_per_interval, 0 );
+
 
 
 
@@ -1242,6 +1274,15 @@ int main(int argc, char **argv)
             fprintf(stderr, "finished particle tracing trial %d\n", trial);
             fprintf(stderr, "predd , %d, nsteps_global , %ld, maxsteps_global , %ld, bal , %f, time_tot , %f, time_overhead, %f, worldsize, %d,minsteps, %ld,\n", prediction, nsteps_global, maxsteps_global, balance, time_total, time_overhead, world.size(), minsteps_global);
             dprint("times: predrun, %f, kdtree , %f, readdata, %f, filter ,%f, final , %f, prediction, %d, max, %ld, min, %ld, nsteps, %ld, wsize, %d, time_pred, %f, tot_transfers, %ld, prdrun_local(max avg), %f, %f, fin_local (max avg), %f, %f, max_steps, %d, time_trace_max, %f, time_trace_avg, %f, ", time_predrun, time_kdtree, time_readdata, time_filter, time_final, prediction, maxsteps_global, minsteps_global, nsteps_global, world.size(), time_prep, ntransfers_global, time_predrun_loc_max, time_predrun_loc_avg, time_fin_loc_max, time_fin_loc_avg, max_steps, time_trace_max, time_trace_avg);
+
+            for (size_t i=0; i<all_steps_per_interval.size(); i++)
+                {   fprintf(stderr, "ganttrank, %d, ", i);
+                    for (size_t j=0; j<all_steps_per_interval[i].size(); j++){
+                        fprintf(stderr, "%ld, ", all_steps_per_interval[i][j]);
+                    }
+                    fprintf(stderr, "\n");
+                }  
+
         }
 
         //         master.prof.totals().output(std::cerr);
@@ -1256,7 +1297,7 @@ int main(int argc, char **argv)
         output_profile(master, nblocks);
 #endif
 
-    } // number of trials
+    } // number f trials
 
     if (world.rank() == 0)
         print_results(seed_rate, world.size(), nblocks, tot_nsynth, ntrials, nrounds, stats);
