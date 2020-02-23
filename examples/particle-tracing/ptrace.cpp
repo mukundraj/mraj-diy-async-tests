@@ -1014,7 +1014,10 @@ int main(int argc, char **argv)
                         std::this_thread::sleep_for( std::chrono::milliseconds(1000));
                         {
                              std::lock_guard<std::mutex> guard(mutex);
-                             steps_per_interval.push_back(nsteps);
+                             if (steps_per_interval.size()>0)
+                                steps_per_interval.push_back(nsteps - steps_per_interval[steps_per_interval.size()-1]);
+                             else
+                                steps_per_interval.push_back(nsteps);
 
                         }
                 }

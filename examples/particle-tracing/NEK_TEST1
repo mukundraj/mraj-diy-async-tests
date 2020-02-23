@@ -14,7 +14,7 @@ infile="/nfs/proj-tpeterka/hguo/data/nek5000.nc"
 max_steps=1024
 
 # seed rate (seed particles every this many grid points in each dimension)
-sr=16
+sr=8
 # sr=128
 
 # domain extents
@@ -50,10 +50,10 @@ prediction=0
 ## mpiexec -n $num_procs valgrind --leak-check=full \
 ##     --show-reachable=yes --track-origins=yes --log-file=nc.vg.%p $exe $args 
 
-num_procs=64
-opts="--blocks 64 --max-rounds 9999 --synthetic 0 --check 0"
-args="$opts $infile $max_steps $sr $mins $maxs $prediction"
-mpiexec -n $num_procs $exe $args 
+# num_procs=64
+# opts="--blocks 64 --max-rounds 9999 --synthetic 0 --check 0"
+# args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+# mpiexec -n $num_procs $exe $args 
 
 
 # with prediction
@@ -74,10 +74,10 @@ prediction=1
 # args="$opts $infile $max_steps $sr $mins $maxs $prediction"
 # mpiexec -n $num_procs $exe $args
 
-# num_procs=16
-# opts="--blocks 16 --max-rounds 9999 --synthetic 0 --check 0"
-# args="$opts $infile $max_steps $sr $mins $maxs $prediction"
-# mpiexec -n $num_procs $exe $args
+num_procs=16
+opts="--blocks 16 --max-rounds 9999 --synthetic 0 --check 0"
+args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+mpiexec -n $num_procs $exe $args
 
 # num_procs=32
 # opts="--blocks 32 --max-rounds 9999 --synthetic 0 --check 0"
