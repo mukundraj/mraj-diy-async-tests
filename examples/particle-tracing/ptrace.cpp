@@ -713,7 +713,8 @@ int main(int argc, char **argv)
                     b->particles.clear();
                 });
 
-        world.barrier();
+        if (barrier)
+            world.barrier();
         double time_start = MPI_Wtime();
 
         if (IEXCHANGE)
