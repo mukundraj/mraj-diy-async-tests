@@ -597,6 +597,7 @@ int main(int argc, char **argv)
     int ntrials             = 1;                // number of trials
     bool merged_traces      = false;            // traces have already been merged to one block
     int tot_nsynth          = nblocks;          // total number of synthetic slow velocity regions
+    bool barrier            = false;            // everybody issues a barrier in the beginning
 
     // command-line ags
     Options ops(argc, argv);
@@ -615,6 +616,7 @@ int main(int argc, char **argv)
         >> Option('l', "log",           log_level,      "log level")
         >> Option('n', "trials",        ntrials,        "number of trials")
         >> Option('o', "nsynth",        tot_nsynth,     "total number of synthetic velocity regions")
+        >> Option(     "barrier",       barrier,        "initial barrier")
         ;
     bool fine = ops >> Present("fine", "Use fine-grain icommunicate");
 
@@ -685,9 +687,13 @@ int main(int argc, char **argv)
     MPI_Comm_get_attr(MPI_COMM_WORLD, MPI_WTIME_IS_GLOBAL, &get_val, &flag);
     if (world.rank() == 0)
         fmt::print(stderr, "MPI_WTIME_IS_GLOBAL = {} flag = {}\n", *get_val, flag);
-    master.prof << "initial barrier";
-    world.barrier();
-    master.prof >> "initial barrier";
+
+    if (barrier)
+    {
+        master.prof << "initial barrier";
+        world.barrier();
+        master.prof >> "initial barrier";
+    }
 
     // run the trials
     for (int trial = 0; trial < ntrials; trial++)
