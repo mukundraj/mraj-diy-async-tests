@@ -911,7 +911,7 @@ int main(int argc, char **argv)
 
     Stats stats; // incremental stats, default initialized to 0's
     int nrounds;
-    size_t nsteps = 0, ntransfers = 0;
+    size_t nsteps = 0, ntransfers = 0, nsteps_lagged = 0;
     std::vector<size_t> steps_per_interval;
     std::atomic<bool> done{false};
     std::mutex mutex;
@@ -1014,8 +1014,10 @@ int main(int argc, char **argv)
                         std::this_thread::sleep_for( std::chrono::milliseconds(1000));
                         {
                              std::lock_guard<std::mutex> guard(mutex);
-                             if (steps_per_interval.size()>0)
-                                steps_per_interval.push_back(nsteps - steps_per_interval[steps_per_interval.size()-1]);
+                             if (steps_per_interval.size()>0){
+                                steps_per_interval.push_back(nsteps - nsteps_lagged);
+                                nsteps_lagged = nsteps;
+                             }
                              else
                                 steps_per_interval.push_back(nsteps);
 
