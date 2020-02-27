@@ -65,7 +65,10 @@
 #include <iterator>
 #include <algorithm>
 
+#include "nabo/nabo.h"
+
 using namespace std;
+using namespace Nabo;
 
 void InitSeeds(Block *b,
                int gid,
@@ -73,7 +76,7 @@ void InitSeeds(Block *b,
                diy::RegularLink<Bounds> *l,
                float sr,
                int synth)
-{
+{   
     // for synthetic data, seed only blocks at -x side of domain, and skip others
     std::vector<int> coords;
     decomposer.gid_to_coords(gid, coords);
@@ -125,9 +128,10 @@ void CInitSeeds(Block *b,
                 EndPt p;
                 p.pid = (gid + 1) * 100 + b->init;
                 p.gid = gid;
-                p[0] = i;
-                p[1] = j;
-                p[2] = k;
+                p[0] = i; p.pt_home.coords[0] = i;
+                p[1] = j; p.pt_home.coords[1] = j;
+                p[2] = k; p.pt_home.coords[2] = k;
+                
                 // if (p.pid==107)
                 b->particles.push_back(p);
                 b->init++;
@@ -217,7 +221,8 @@ void trace_particles(Block *b,
 }
 
 void deq_incoming_iexchange(Block *b,
-                            const diy::Master::ProxyWithLink &cp)
+                            const diy::Master::ProxyWithLink &cp, 
+                            bool prediction)
 {
     diy::RegularLink<Bounds> *l = static_cast<diy::RegularLink<Bounds> *>(cp.link());
     for (size_t i = 0; i < l->size(); ++i)
@@ -228,7 +233,11 @@ void deq_incoming_iexchange(Block *b,
         {   //cnt ++;
             EndPt incoming_endpt;
             cp.dequeue(nbr_gid, incoming_endpt);
-            b->particles.push_back(incoming_endpt);
+            if (prediction)
+                b->particles.push_back(incoming_endpt);
+            else
+                b->particles_pqueue.push(incoming_endpt);
+                
         }
         // if (cnt>0)
         //  dprint("psize %d, gid %d", cnt, cp.gid());
@@ -261,20 +270,29 @@ bool trace_particles_iex(Block *b,
 
     
     //for (auto i = 0; i < b->particles.size(); i++)
+    std::unique_ptr<EndPt> par (nullptr);
     
-    if (b->particles.size()>0)
-    {
+    
+    if (b->particles.size()>0){
         // Pt &cur_p = b->particles[i].pt; // current end point
-        EndPt par = b->particles.back();
+        // EndPt par = b->particles.back();
+        par = std::unique_ptr<EndPt>(new EndPt(b->particles.back()));
         b->particles.pop_back();
-        Pt &cur_p = par.pt;
-       
+    }else if(b->particles_pqueue.size()>0){
+        par = std::unique_ptr<EndPt>(new EndPt(b->particles_pqueue.top()));
+        b->particles_pqueue.pop();
+        
+    }
 
-        Segment s(par);     // segment with one point p
+    if (par){
+        
+        Pt &cur_p = par->pt;
+
+        Segment s(par.get());     // segment with one point p
         Pt next_p;                      // coordinates of next end point
         bool finished = false;
 
-        if (par.pid == 800)
+        if (par->pid == 800)
             dprint("%f %f %f @ %d", cur_p.coords[0], cur_p.coords[1], cur_p.coords[2], cp.gid());
         // trace this segment until it leaves the block
         double time_start = MPI_Wtime();
@@ -282,14 +300,14 @@ bool trace_particles_iex(Block *b,
         while (cadvect_rk1(st, sz, vec, cur_p.coords.data(), 0.05, next_p.coords.data()))
         {
             nsteps++;
-            par.nsteps++;
+            par->nsteps++;
             s.pts.push_back(next_p);
             cur_p = next_p;
 
             // if (par.pid == 800)
             //     dprint("%f %f %f @ %d", cur_p.coords[0], cur_p.coords[1], cur_p.coords[2], cp.gid());
 
-            if (par.nsteps >= max_steps)
+            if (par->nsteps >= max_steps)
             {
                 finished = true;
                 break;
@@ -303,6 +321,7 @@ bool trace_particles_iex(Block *b,
                 way_pt[1] = cur_p.coords[1];
                 way_pt[2] = cur_p.coords[2];
                 way_pt.predonly = true;
+                // way_pt.esteps = par->nsteps; // esteps remains zero for along the way pts
                 b->particles_store.push_back(way_pt);
             }
 
@@ -319,6 +338,19 @@ bool trace_particles_iex(Block *b,
         { // this segment is done
             b->done++;
             // dprint("pid: %d, step %d, %f %f %f", par.pid, par.nsteps, cur_p.coords[0], cur_p.coords[1], cur_p.coords[2]);
+            if (prediction){
+                EndPt start_pt;
+
+                start_pt[0] = par->pt_home.coords[0];
+                start_pt[1] = par->pt_home.coords[1];
+                start_pt[2] = par->pt_home.coords[2];
+                start_pt.predonly = true;
+                start_pt.esteps = par->nsteps;
+
+                // dprint("storing %f %f %f , esteps %d", start_pt[0], start_pt[1], start_pt[2], start_pt.esteps);
+                b->particles_store.push_back(start_pt);
+
+            }
         }
         else // find destination of segment endpoint
         {   
@@ -330,8 +362,11 @@ bool trace_particles_iex(Block *b,
             utl::in(*l, next_p.coords, insert_it, cdomain, false);
 
             EndPt out_pt(s);
+            out_pt.pt_home.coords[0] = par->pt_home.coords[0]; 
+            out_pt.pt_home.coords[1] = par->pt_home.coords[1]; 
+            out_pt.pt_home.coords[2] = par->pt_home.coords[2]; 
             // out_pt.pid = par.pid;
-            out_pt.nsteps = par.nsteps;
+            out_pt.nsteps = par->nsteps;
             if (dests.size())
             {   
                 ntransfers ++;
@@ -355,7 +390,7 @@ bool trace_particles_iex(Block *b,
     if (prediction==false)
         b->particles_store.clear();
 
-    if (b->particles.size()>0)
+    if (b->particles.size()>0 || b->particles_pqueue.size()>0)
         return false;
     else
         return true;
@@ -411,7 +446,7 @@ void trace_block(Block *b,
     {
         do
         {
-            deq_incoming_iexchange(b, cp);
+            deq_incoming_iexchange(b, cp, 0);
             trace_particles(b, cp, decomposer, max_steps, outgoing_endpts, nsteps);
             b->particles.clear();
         } while (cp.fill_incoming());
@@ -458,7 +493,7 @@ bool trace_block_iex(Block *b,
     {
         // do
         // {
-            deq_incoming_iexchange(b, cp);
+            deq_incoming_iexchange(b, cp, prediction);
             // trace_particles(b, cp, decomposer, max_steps, outgoing_endpts, nsteps);
             val = trace_particles_iex(b, cp, cdomain, max_steps, outgoing_endpts, nsteps, ntransfers, prediction, time_trace);
             // b->particles.clear();
@@ -911,7 +946,7 @@ int main(int argc, char **argv)
 
     Stats stats; // incremental stats, default initialized to 0's
     int nrounds;
-    size_t nsteps = 0, ntransfers = 0;
+    size_t nsteps = 0, ntransfers = 0, nsteps_lagged = 0;
     std::vector<size_t> steps_per_interval;
     std::atomic<bool> done{false};
     std::mutex mutex;
@@ -1014,8 +1049,12 @@ int main(int argc, char **argv)
                         std::this_thread::sleep_for( std::chrono::milliseconds(1000));
                         {
                              std::lock_guard<std::mutex> guard(mutex);
-                             if (steps_per_interval.size()>0)
-                                steps_per_interval.push_back(nsteps - steps_per_interval[steps_per_interval.size()-1]);
+                             if (steps_per_interval.size()>0){
+                                 
+                                // steps_per_interval.push_back(nsteps - steps_per_interval[steps_per_interval.size()-1]);
+                                steps_per_interval.push_back(nsteps - nsteps_lagged);
+                                nsteps_lagged = nsteps;
+                             }
                              else
                                 steps_per_interval.push_back(nsteps);
 
@@ -1123,13 +1162,76 @@ int main(int argc, char **argv)
                 // filter out non prediction particles
                 master_iex.foreach ([&](Block *b, const diy::Master::ProxyWithLink &icp) -> bool {
                     b->particles_store.clear();
+
+                    std::vector<int> inds_for_kdtree;
                     for (size_t i = 0; i < b->particles.size(); i++)
                     {
-                        if (b->particles[i].predonly == false)
+                        if (b->particles[i].predonly == false) // store the to be advected points
                             b->particles_store.push_back(b->particles[i]);
+                        // else push prediction particles indices into a kd-tree
+                        else{ 
+                            if (b->particles[i].esteps>0){ // only include starting positions
+                                inds_for_kdtree.push_back(i);
+                                // dprint("i: %d retrieved %f %f %f, esteps %d ", i,b->particles[i].pt_home.coords[0], b->particles[i].pt_home.coords[1], b->particles[i].pt_home.coords[2], b->particles[i].esteps);
+                            }
+                        }
                     }
 
-                    b->particles = std::move(b->particles_store);
+                    
+                    // traverse b->particles_store, update the estep, and push to priority queue
+                    // b->particles = std::move(b->particles_store);
+
+                    // dprint("GLOBALTIME %d", MPI_WTIME_IS_GLOBAL);
+                   
+                    if (inds_for_kdtree.size()>0){
+
+                        // b->particles = std::move(b->particles_store); 
+                        // dprint("Spoints %ld, world %d", inds_for_kdtree.size(), world.rank());
+                        // pvi(inds_for_kdtree);
+                        Eigen::MatrixXf M(3, inds_for_kdtree.size());
+                        for (size_t i=0; i<inds_for_kdtree.size(); i++){
+                            size_t idx = inds_for_kdtree[i];
+                            M(0,i) = b->particles[idx][0];
+                            M(1,i) = b->particles[idx][1];
+                            M(2,i) = b->particles[idx][2];
+
+                            // dprint("idx %d: %f %f %f", idx, b->particles[idx][0], b->particles[idx][1], b->particles[idx][2]);
+                            // dprint("%f %f %f", M.coeff(0,i), M.coeff(1,i), M.coeff(2,i));
+                        }
+                        NNSearchF* nns = NNSearchF::createKDTreeLinearHeap(M);
+
+                        
+
+                        const int K = 1;
+                        Eigen::VectorXi nearest_idx(K);
+                        Eigen::VectorXf dists(K);
+                        Eigen::VectorXf q(3, 1);
+                        
+                        for (size_t i=0; i<b->particles_store.size(); i++){
+
+                            // get and set edist
+                            q << b->particles_store[i][0], b->particles_store[i][1], b->particles_store[i][2];
+                            nns->knn(q, nearest_idx, dists, K, 0, NNSearchF::ALLOW_SELF_MATCH);
+                            // dprint("nearest %d among size %ld", nearest_idx[0], inds_for_kdtree.size());
+                            int idx = inds_for_kdtree[nearest_idx[0]];
+                            b->particles_store[i].esteps = b->particles[idx].esteps;
+
+                            // push to pqueue
+                            b->particles_pqueue.push(b->particles_store[i]);
+                        }
+                        // dprint("sizes.. %ld %ld", b->particles_store.size(), b->particles_pqueue.size());
+                        b->particles.clear();
+                        // b->particles = std::move(b->particles_store);
+
+                        delete nns;
+
+                    }
+                    
+                    else{
+                        b->particles = std::move(b->particles_store); 
+                    }
+
+
                 });
 
                 world.barrier();

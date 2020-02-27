@@ -82,6 +82,9 @@ struct EndPt
     int  nsteps;                             // number of steps this particle went so far
     bool predonly;                        // whether point is advected in prediction round only
 
+    int esteps;                             // expected number of steps (decided priority)
+    Pt pt_home;                             // coordinates of home point (only used during prediction run)
+
     const float& operator [](int i) const { return pt.coords[i]; }
     float& operator [](int i)             { return pt.coords[i]; }
 
@@ -91,8 +94,17 @@ struct EndPt
             gid      = 0;
             nsteps   = 0;
             predonly = 0;
+            esteps = 0;
         }
     EndPt(struct Segment& s);                // extract the end point of a segment
+
+};
+
+struct CompareEndPt{
+    bool operator()(EndPt &e1, EndPt &e2){
+        return e1.esteps < e2.esteps;
+
+    }
 };
 
 // one segment of a particle trace (trajectory)
@@ -115,6 +127,16 @@ struct Segment
             Pt pt    { { p[0], p[1], p[2] } };
             pts.push_back(pt);
         }
+
+        Segment(EndPt* p)                        // construct a segment from one point
+        {
+            pid      = p->pid;
+            gid      = p->gid;
+            pid      = p->pid;
+            Pt pt    { { p->pt.coords[0], p->pt.coords[1], p->pt.coords[2] } };
+            pts.push_back(pt);
+        }
+
 
     // whether end point is inside given bounds
     // on the boundary is considered inside

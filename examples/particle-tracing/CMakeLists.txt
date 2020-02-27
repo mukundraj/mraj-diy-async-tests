@@ -4,8 +4,17 @@ add_executable              (ptrace-exchange ptrace.cpp advect.cpp misc.cpp)
 target_compile_definitions  (ptrace-exchange PUBLIC IEXCHANGE=0)
 
 
-target_link_libraries       (ptrace-iexchange ${libraries} ${PNETCDF_LIBRARY})
-target_link_libraries       (ptrace-exchange  ${libraries} ${PNETCDF_LIBRARY})
+#--------------------
+# DEPENDENCY: nabo
+#--------------------
+find_package(libnabo REQUIRED PATHS ${LIBNABO_INSTALL_DIR})
+#include(libnaboConfig)
+include_directories(${libnabo_INCLUDE_DIRS})
+set(EXTERNAL_LIBS ${EXTERNAL_LIBS} ${libnabo_LIBRARIES})
+message(STATUS "libnabo found, version ${libnabo_VERSION} (include=${libnabo_INCLUDE_DIRS} libs=${libnabo_LIBRARIES})")
+
+target_link_libraries       (ptrace-iexchange ${libraries} ${PNETCDF_LIBRARY} ${libnabo_LIBRARIES})
+target_link_libraries       (ptrace-exchange  ${libraries} ${PNETCDF_LIBRARY} ${libnabo_LIBRARIES})
 
 
 
@@ -18,8 +27,6 @@ if (WITH_TIMEINFO)
 target_compile_definitions(ptrace-iexchange PRIVATE WITH_TIMEINFO)
 target_compile_definitions(ptrace-exchange  PRIVATE WITH_TIMEINFO)
 endif()
-
-
 
 install(TARGETS ptrace-iexchange
         DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/particle-tracing
