@@ -245,7 +245,10 @@ bool trace_particles_iex(Block *b,
                          size_t &nsteps,
                          size_t &ntransfers,
                          bool prediction,
-                         double &time_trace)
+                         double &time_trace, 
+                         const double &time_start, 
+                         std::vector<int> &step_vs_time, 
+                         std::vector<int> &csteps_vs_ftime)
 {
     diy::RegularLink<CBounds> *l = static_cast<diy::RegularLink<CBounds> *>(cp.link());
 
@@ -263,12 +266,19 @@ bool trace_particles_iex(Block *b,
     //for (auto i = 0; i < b->particles.size(); i++)
     
     if (b->particles.size()>0)
-    {
+    {   
+
         // Pt &cur_p = b->particles[i].pt; // current end point
         EndPt par = b->particles.back();
         b->particles.pop_back();
         Pt &cur_p = par.pt;
-       
+
+        // for vis analytics
+        double time_pstart = MPI_Wtime();
+        int bin = (int) std::floor(time_pstart - time_start);
+        step_vs_time[bin*max_steps/32+par.nsteps/32] += 1;
+        int old_step_cnt = par.nsteps;
+
 
         Segment s(par);     // segment with one point p
         Pt next_p;                      // coordinates of next end point
@@ -277,7 +287,7 @@ bool trace_particles_iex(Block *b,
         if (par.pid == 800)
             dprint("%f %f %f @ %d", cur_p.coords[0], cur_p.coords[1], cur_p.coords[2], cp.gid());
         // trace this segment until it leaves the block
-        double time_start = MPI_Wtime();
+        double time_start_loc = MPI_Wtime();
 
         while (cadvect_rk1(st, sz, vec, cur_p.coords.data(), 0.05, next_p.coords.data()))
         {
@@ -308,17 +318,27 @@ bool trace_particles_iex(Block *b,
 
         }
 
-        time_trace += MPI_Wtime() - time_start;
+        time_trace += MPI_Wtime() - time_start_loc;
 
         b->segments.push_back(s);
 
         if (!cinside(next_p, cdomain))
             finished = true;
 
+
+        double time_pend = MPI_Wtime();
+        int binf = (int) std::floor(time_pend - time_start);
+        int new_step_cnt = par.nsteps - old_step_cnt;
+        double time_diff = time_pend - time_pstart;
+        int cidx = binf*max_steps/32+new_step_cnt/32;
+        csteps_vs_ftime[cidx] += 1; 
+
         if (finished)
         { // this segment is done
             b->done++;
             // dprint("pid: %d, step %d, %f %f %f", par.pid, par.nsteps, cur_p.coords[0], cur_p.coords[1], cur_p.coords[2]);
+
+
         }
         else // find destination of segment endpoint
         {   
@@ -436,7 +456,10 @@ bool trace_block_iex(Block *b,
                      size_t &nsteps,
                      size_t &ntransfers,
                      bool prediction,
-                     double &time_trace)
+                     double &time_trace, 
+                     const double &time_start, 
+                     std::vector<int> &step_vs_time, 
+                      std::vector<int> &csteps_vs_ftime)
 {
     const int gid = cp.gid();
     diy::RegularLink<Bounds> *l = static_cast<diy::RegularLink<Bounds> *>(cp.link());
@@ -460,7 +483,7 @@ bool trace_block_iex(Block *b,
         // {
             deq_incoming_iexchange(b, cp);
             // trace_particles(b, cp, decomposer, max_steps, outgoing_endpts, nsteps);
-            val = trace_particles_iex(b, cp, cdomain, max_steps, outgoing_endpts, nsteps, ntransfers, prediction, time_trace);
+            val = trace_particles_iex(b, cp, cdomain, max_steps, outgoing_endpts, nsteps, ntransfers, prediction, time_trace, time_start, step_vs_time, csteps_vs_ftime);
             // b->particles.clear();
         // } while (cp.fill_incoming());
     }
@@ -500,11 +523,14 @@ bool trace_block_iexchange(Block *b,
                            size_t &nsteps,
                            size_t &ntransfers,
                            bool prediction, 
-                           double &time_trace)
+                           double &time_trace,
+                           const double &time_start, 
+                           std::vector<int> &step_vs_time, 
+                           std::vector<int> &csteps_vs_ftime)
 {
     map<diy::BlockID, vector<EndPt>> outgoing_endpts; // needed to call trace_particles() but otherwise unused in iexchange
     // trace_block(b, cp, decomposer, assigner, max_steps, seed_rate, share_face, synth, outgoing_endpts, nsteps);
-    bool val = trace_block_iex(b, cp, cdomain, assigner, max_steps, seed_rate, share_face, synth, outgoing_endpts, nsteps, ntransfers, prediction, time_trace);
+    bool val = trace_block_iex(b, cp, cdomain, assigner, max_steps, seed_rate, share_face, synth, outgoing_endpts, nsteps, ntransfers, prediction, time_trace, time_start, step_vs_time, csteps_vs_ftime);
     return val;
 }
 
@@ -915,6 +941,8 @@ int main(int argc, char **argv)
     std::vector<size_t> steps_per_interval;
     std::atomic<bool> done{false};
     std::mutex mutex;
+    std::vector<int> step_vs_time((max_steps/32) * 400);
+    std::vector<int> csteps_vs_ftime(max_steps/32 * 400);
 
     // check if clocks are synchronized by printing the value of MPI_WTIME_IS_GLOBAL and timing an initial barrier
     // barrier also has the effect of removing any skew in generating or reading the data
@@ -1077,7 +1105,10 @@ int main(int argc, char **argv)
                                                      nsteps,
                                                      ntransfers, 
                                                      true, 
-                                                     time_trace);
+                                                     time_trace, 
+                                                     time_start, 
+                                                     step_vs_time, 
+                                                     csteps_vs_ftime);
                     return val;
                 });
 
@@ -1163,7 +1194,10 @@ int main(int argc, char **argv)
                                                  nsteps,
                                                  ntransfers,
                                                  false, 
-                                                 time_trace);
+                                                 time_trace, 
+                                                 time_start, 
+                                                 step_vs_time, 
+                                                 csteps_vs_ftime);
                 return val;
             });
 
@@ -1267,7 +1301,11 @@ int main(int argc, char **argv)
         std::vector<std::vector<size_t>> all_steps_per_interval;
         diy::mpi::gather (world, steps_per_interval, all_steps_per_interval, 0 );
 
+        std::vector<int> step_vs_time_all(step_vs_time.size());
+        diy::mpi::reduce(world, step_vs_time, step_vs_time_all, 0, std::plus<int>());
 
+        std::vector<int> csteps_vs_ftime_all(csteps_vs_ftime.size());
+        diy::mpi::reduce(world, csteps_vs_ftime, csteps_vs_ftime_all, 0, std::plus<int>());
 
 
         float avg = float(nsteps_global) / world.size();
@@ -1287,6 +1325,19 @@ int main(int argc, char **argv)
                     }
                     fprintf(stderr, "\n");
                 }  
+
+            fprintf(stderr, "step_vs_time, p, %d, ws, %d, ", prediction, world.size());
+            for (size_t i=0; i<step_vs_time_all.size(); i++){
+                fprintf(stderr, "%d ", step_vs_time_all[i]);
+            }
+            fprintf(stderr, "\n");
+
+            fprintf(stderr, "csteps_vs_ftime, p, %d, ws, %d, ", prediction, world.size());
+            for (size_t i=0; i<csteps_vs_ftime.size(); i++){
+                fprintf(stderr, "%d ", csteps_vs_ftime_all[i]);
+            }
+            fprintf(stderr, "\n");
+                
 
         }
 

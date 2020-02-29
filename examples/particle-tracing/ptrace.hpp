@@ -81,6 +81,7 @@ struct EndPt
     int  gid;                                // block gid of seed particle (start) of this trace
     int  nsteps;                             // number of steps this particle went so far
     bool predonly;                        // whether point is advected in prediction round only
+    double st_time;                         // start time of a particle
 
     const float& operator [](int i) const { return pt.coords[i]; }
     float& operator [](int i)             { return pt.coords[i]; }
