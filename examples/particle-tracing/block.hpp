@@ -43,6 +43,7 @@
 #include <iomanip>      // std::setprecision
 #include <cmath>
 #include "misc.h"
+#include <queue>
 
 typedef diy::DiscreteBounds            Bounds;
 typedef diy::RegularGridLink           RGLink;
@@ -235,6 +236,7 @@ struct Block
     vector<Segment>      segments;           // finished segments of particle traces
     vector<EndPt>        particles;
     vector<EndPt>        particles_store;    // storage for currently inactive particles (not advected)
+    priority_queue<EndPt, std::vector<EndPt>, CompareEndPt> particles_pqueue;   // priority queue for storing particles
 
 #ifdef WITH_VTK
     vtkNew<vtkPoints>    points;             // points to be traced

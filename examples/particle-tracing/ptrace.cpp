@@ -125,9 +125,9 @@ void CInitSeeds(Block *b,
                 EndPt p;
                 p.pid = (gid + 1) * 100 + b->init;
                 p.gid = gid;
-                p[0] = i;
-                p[1] = j;
-                p[2] = k;
+                p[0] = i; p.pt_home.coords[0] = i;
+                p[1] = j; p.pt_home.coords[1] = j;
+                p[2] = k; p.pt_home.coords[2] = k;
                 // if (p.pid==107)
                 b->particles.push_back(p);
                 b->init++;
@@ -217,7 +217,8 @@ void trace_particles(Block *b,
 }
 
 void deq_incoming_iexchange(Block *b,
-                            const diy::Master::ProxyWithLink &cp)
+                            const diy::Master::ProxyWithLink &cp, 
+                            bool prediction)
 {
     diy::RegularLink<Bounds> *l = static_cast<diy::RegularLink<Bounds> *>(cp.link());
     for (size_t i = 0; i < l->size(); ++i)
@@ -228,7 +229,11 @@ void deq_incoming_iexchange(Block *b,
         {   //cnt ++;
             EndPt incoming_endpt;
             cp.dequeue(nbr_gid, incoming_endpt);
-            b->particles.push_back(incoming_endpt);
+            // b->particles.push_back(incoming_endpt);
+             if (prediction)
+                b->particles.push_back(incoming_endpt);
+            else
+                b->particles_pqueue.push(incoming_endpt);
         }
         // if (cnt>0)
         //  dprint("psize %d, gid %d", cnt, cp.gid());
@@ -264,42 +269,50 @@ bool trace_particles_iex(Block *b,
 
     
     //for (auto i = 0; i < b->particles.size(); i++)
+
+     std::unique_ptr<EndPt> par (nullptr);
+
+    if (b->particles.size()>0){
+        // Pt &cur_p = b->particles[i].pt; // current end point
+        // EndPt par = b->particles.back();
+        par = std::unique_ptr<EndPt>(new EndPt(b->particles.back()));
+        b->particles.pop_back();
+    }else if(b->particles_pqueue.size()>0){
+        par = std::unique_ptr<EndPt>(new EndPt(b->particles_pqueue.top()));
+        b->particles_pqueue.pop();
+        
+    }
     
-    if (b->particles.size()>0)
+    if (par)
     {   
 
-        // Pt &cur_p = b->particles[i].pt; // current end point
-        EndPt par = b->particles.back();
-        b->particles.pop_back();
-        Pt &cur_p = par.pt;
+        Pt &cur_p = par->pt;
 
         // for vis analytics
         double time_pstart = MPI_Wtime();
         int bin = (int) std::floor(time_pstart - time_start);
-        step_vs_time[bin*max_steps/32+par.nsteps/32] += 1;
-        int old_step_cnt = par.nsteps;
+        step_vs_time[bin*max_steps/32+par->nsteps/32] += 1;
+        int old_step_cnt = par->nsteps;
 
 
-        Segment s(par);     // segment with one point p
+        Segment s(par.get());     // segment with one point p
         Pt next_p;                      // coordinates of next end point
         bool finished = false;
 
-        if (par.pid == 800)
-            dprint("%f %f %f @ %d", cur_p.coords[0], cur_p.coords[1], cur_p.coords[2], cp.gid());
         // trace this segment until it leaves the block
         double time_start_loc = MPI_Wtime();
 
         while (cadvect_rk1(st, sz, vec, cur_p.coords.data(), 0.05, next_p.coords.data()))
         {
             nsteps++;
-            par.nsteps++;
+            par->nsteps++;
             s.pts.push_back(next_p);
             cur_p = next_p;
 
             // if (par.pid == 800)
             //     dprint("%f %f %f @ %d", cur_p.coords[0], cur_p.coords[1], cur_p.coords[2], cp.gid());
 
-            if (par.nsteps >= max_steps)
+            if (par->nsteps >= max_steps)
             {
                 finished = true;
                 break;
@@ -328,7 +341,7 @@ bool trace_particles_iex(Block *b,
 
         double time_pend = MPI_Wtime();
         int binf = (int) std::floor(time_pend - time_start);
-        int new_step_cnt = par.nsteps - old_step_cnt;
+        int new_step_cnt = par->nsteps - old_step_cnt;
         double time_diff = time_pend - time_pstart;
         int cidx = binf*max_steps/32+new_step_cnt/32;
         csteps_vs_ftime[cidx] += 1; 
@@ -337,6 +350,19 @@ bool trace_particles_iex(Block *b,
         { // this segment is done
             b->done++;
             // dprint("pid: %d, step %d, %f %f %f", par.pid, par.nsteps, cur_p.coords[0], cur_p.coords[1], cur_p.coords[2]);
+              if (prediction){
+                EndPt start_pt;
+
+                start_pt[0] = par->pt_home.coords[0];
+                start_pt[1] = par->pt_home.coords[1];
+                start_pt[2] = par->pt_home.coords[2];
+                start_pt.predonly = true;
+                start_pt.esteps = par->nsteps;
+
+                // dprint("storing %f %f %f , esteps %d", start_pt[0], start_pt[1], start_pt[2], start_pt.esteps);
+                b->particles_store.push_back(start_pt);
+
+            }
 
 
         }
@@ -350,8 +376,13 @@ bool trace_particles_iex(Block *b,
             utl::in(*l, next_p.coords, insert_it, cdomain, false);
 
             EndPt out_pt(s);
+            if (prediction){
+                out_pt.pt_home.coords[0] = par->pt_home.coords[0]; 
+                out_pt.pt_home.coords[1] = par->pt_home.coords[1]; 
+                out_pt.pt_home.coords[2] = par->pt_home.coords[2]; 
+            }
             // out_pt.pid = par.pid;
-            out_pt.nsteps = par.nsteps;
+            out_pt.nsteps = par->nsteps;
             if (dests.size())
             {   
                 ntransfers ++;
@@ -375,7 +406,7 @@ bool trace_particles_iex(Block *b,
     if (prediction==false)
         b->particles_store.clear();
 
-    if (b->particles.size()>0)
+    if (b->particles.size()>0  || b->particles_pqueue.size()>0)
         return false;
     else
         return true;
@@ -431,7 +462,7 @@ void trace_block(Block *b,
     {
         do
         {
-            deq_incoming_iexchange(b, cp);
+            deq_incoming_iexchange(b, cp, 0);
             trace_particles(b, cp, decomposer, max_steps, outgoing_endpts, nsteps);
             b->particles.clear();
         } while (cp.fill_incoming());
@@ -481,7 +512,7 @@ bool trace_block_iex(Block *b,
     {
         // do
         // {
-            deq_incoming_iexchange(b, cp);
+            deq_incoming_iexchange(b, cp, prediction);
             // trace_particles(b, cp, decomposer, max_steps, outgoing_endpts, nsteps);
             val = trace_particles_iex(b, cp, cdomain, max_steps, outgoing_endpts, nsteps, ntransfers, prediction, time_trace, time_start, step_vs_time, csteps_vs_ftime);
             // b->particles.clear();
@@ -1156,10 +1187,26 @@ int main(int argc, char **argv)
                 // filter out non prediction particles
                 master_iex.foreach ([&](Block *b, const diy::Master::ProxyWithLink &icp) -> bool {
                     b->particles_store.clear();
+
+                    int block_esteps=0; 
+                    int num_pred = 0; // number of predicted particles
                     for (size_t i = 0; i < b->particles.size(); i++)
                     {
-                        if (b->particles[i].predonly == false)
+                        if (b->particles[i].predonly == false) // store the to be advected points
                             b->particles_store.push_back(b->particles[i]);
+                        // else store the expected #steps of an arbitrary predicted particle
+                        else{
+                            
+                                block_esteps += b->particles[i].esteps;
+                        }
+                    }
+
+                    // block's expected prediction length is average of esteps of all its predicted points
+                    if (num_pred>0)
+                        block_esteps /= num_pred;
+
+                    for (size_t i=0; i<b->particles_store.size(); i++){
+                        b->particles_store[i].esteps = block_esteps;
                     }
 
                     b->particles = std::move(b->particles_store);

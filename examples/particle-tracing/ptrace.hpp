@@ -82,6 +82,8 @@ struct EndPt
     int  nsteps;                             // number of steps this particle went so far
     bool predonly;                        // whether point is advected in prediction round only
     double st_time;                         // start time of a particle
+    int esteps;                             // expected number of steps (decided priority)
+    Pt pt_home;                             // coordinates of home point (only used during prediction run)
 
     const float& operator [](int i) const { return pt.coords[i]; }
     float& operator [](int i)             { return pt.coords[i]; }
@@ -92,22 +94,31 @@ struct EndPt
             gid      = 0;
             nsteps   = 0;
             predonly = 0;
+            esteps   = 0;
         }
     EndPt(struct Segment& s);                // extract the end point of a segment
+};
+
+struct CompareEndPt
+{
+    bool operator()(EndPt &e1, EndPt &e2)
+    {
+        return e1.esteps < e2.esteps;
+    }
 };
 
 // one segment of a particle trace (trajectory)
 struct Segment
 {
-    int        pid;                          // particle ID, unique within a block
-    vector<Pt> pts;                          // points along trace
-    int        gid;                          // block gid of seed particle (start) of this trace
+    int pid;        // particle ID, unique within a block
+    vector<Pt> pts; // points along trace
+    int gid;        // block gid of seed particle (start) of this trace
 
     Segment()
-        {
-            pid      = 0;
-            gid      = 0;
-        }
+    {
+        pid = 0;
+        gid = 0;
+    }
     Segment(EndPt& p)                        // construct a segment from one point
         {
             pid      = p.pid;
@@ -116,10 +127,19 @@ struct Segment
             Pt pt    { { p[0], p[1], p[2] } };
             pts.push_back(pt);
         }
+     
+    Segment(EndPt *p) // construct a segment from one point
+        {
+            pid = p->pid;
+            gid = p->gid;
+            pid = p->pid;
+            Pt pt{{p->pt.coords[0], p->pt.coords[1], p->pt.coords[2]}};
+            pts.push_back(pt);
+        }
 
-    // whether end point is inside given bounds
-    // on the boundary is considered inside
-    bool inside(const int lb[3], const int ub[3]) const
+        // whether end point is inside given bounds
+        // on the boundary is considered inside
+        bool inside(const int lb[3], const int ub[3]) const
         {
             for (int i = 0; i < 3; i++)
                 if (pts.back().coords[i] < (float)(lb[i]) || pts.back().coords[i] > (float)(ub[i]))
