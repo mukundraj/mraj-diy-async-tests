@@ -123,7 +123,7 @@ void CInitSeeds(Block *b,
             for (float k = cdomain.min[2]; k < cdomain.max[2]; k += sr)
             {
                 EndPt p;
-                p.pid = (gid + 1) * 100 + b->init;
+                p.pid = b->init;
                 p.gid = gid;
                 p[0] = i; p.pt_home.coords[0] = i;
                 p[1] = j; p.pt_home.coords[1] = j;
@@ -230,9 +230,9 @@ void deq_incoming_iexchange(Block *b,
             EndPt incoming_endpt;
             cp.dequeue(nbr_gid, incoming_endpt);
             // b->particles.push_back(incoming_endpt);
-             if (prediction)
-                b->particles.push_back(incoming_endpt);
-            else
+            // if (prediction)
+            //     b->particles.push_back(incoming_endpt);
+            // else
                 b->particles_pqueue.push(incoming_endpt);
         }
         // if (cnt>0)
@@ -254,7 +254,8 @@ bool trace_particles_iex(Block *b,
                          const double &time_start, 
                          std::vector<int> &step_vs_time, 
                          std::vector<int> &csteps_vs_ftime, 
-                         size_t &np_core)
+                         size_t &np_core, 
+                         std::vector<int> &esteps)
 {
     diy::RegularLink<CBounds> *l = static_cast<diy::RegularLink<CBounds> *>(cp.link());
 
@@ -312,6 +313,7 @@ bool trace_particles_iex(Block *b,
         while (cadvect_rk1(st, sz, vec, cur_p.coords.data(), 0.05, next_p.coords.data()))
         {
             nsteps++;
+
             par->nsteps++;
             s.pts.push_back(next_p);
             cur_p = next_p;
@@ -325,16 +327,16 @@ bool trace_particles_iex(Block *b,
                 break;
             }
 
-            // if predicting, add copy coordinates to EndPt and add to b->particles_store
-            if (prediction == true && cinside(cur_p, cdomain) && nsteps % 2 == 0)
-            {   
-                EndPt way_pt;
-                way_pt[0] = cur_p.coords[0];
-                way_pt[1] = cur_p.coords[1];
-                way_pt[2] = cur_p.coords[2];
-                way_pt.predonly = true;
-                b->particles_store.push_back(way_pt);
-            }
+            // // if predicting, add copy coordinates to EndPt and add to b->particles_store
+            // if (prediction == true && cinside(cur_p, cdomain) && nsteps % 2 == 0)
+            // {   
+            //     EndPt way_pt;
+            //     way_pt[0] = cur_p.coords[0];
+            //     way_pt[1] = cur_p.coords[1];
+            //     way_pt[2] = cur_p.coords[2];
+            //     way_pt.predonly = true;
+            //     b->particles_store.push_back(way_pt);
+            // }
 
         }
 
@@ -350,14 +352,14 @@ bool trace_particles_iex(Block *b,
         int binf = (int) std::floor(time_pend - time_start);
         int new_step_cnt = par->nsteps - old_step_cnt;
         double time_diff = time_pend - time_pstart;
-        int cidx = binf*max_steps/32+new_step_cnt/32;
-        csteps_vs_ftime[cidx] += 1; 
+        // int cidx = binf*max_steps/32+new_step_cnt/32;
+        // csteps_vs_ftime[cidx] += 1; 
 
         if (finished)
         { // this segment is done
             b->done++;
             // dprint("pid: %d, step %d, %f %f %f", par.pid, par.nsteps, cur_p.coords[0], cur_p.coords[1], cur_p.coords[2]);
-              if (prediction){
+            //   if (prediction){
                 EndPt start_pt;
 
                 start_pt[0] = par->pt_home.coords[0];
@@ -366,10 +368,15 @@ bool trace_particles_iex(Block *b,
                 start_pt.predonly = true;
                 start_pt.esteps = par->nsteps;
 
-                // dprint("storing %f %f %f , esteps %d", start_pt[0], start_pt[1], start_pt[2], start_pt.esteps);
-                b->particles_store.push_back(start_pt);
+                esteps[par->pid] = par->nsteps;
 
-            }
+                // dprint("storing %f %f %f , esteps %d", start_pt[0], start_pt[1], start_pt[2], start_pt.esteps);
+                // b->particles_store.push_back(start_pt);
+
+            // }
+
+            int cidx = binf*max_steps/32+par->nsteps/32;
+            csteps_vs_ftime[cidx] += 1; 
 
 
         }
@@ -498,7 +505,8 @@ bool trace_block_iex(Block *b,
                      const double &time_start, 
                      std::vector<int> &step_vs_time, 
                       std::vector<int> &csteps_vs_ftime, 
-                      size_t &np_core)
+                      size_t &np_core, 
+                      std::vector<int> &esteps)
 {
     const int gid = cp.gid();
     diy::RegularLink<Bounds> *l = static_cast<diy::RegularLink<Bounds> *>(cp.link());
@@ -522,7 +530,7 @@ bool trace_block_iex(Block *b,
         // {
             deq_incoming_iexchange(b, cp, prediction);
             // trace_particles(b, cp, decomposer, max_steps, outgoing_endpts, nsteps);
-            val = trace_particles_iex(b, cp, cdomain, max_steps, outgoing_endpts, nsteps, ntransfers, prediction, time_trace, time_start, step_vs_time, csteps_vs_ftime, np_core);
+            val = trace_particles_iex(b, cp, cdomain, max_steps, outgoing_endpts, nsteps, ntransfers, prediction, time_trace, time_start, step_vs_time, csteps_vs_ftime, np_core, esteps);
             // b->particles.clear();
         // } while (cp.fill_incoming());
     }
@@ -566,11 +574,12 @@ bool trace_block_iexchange(Block *b,
                            const double &time_start, 
                            std::vector<int> &step_vs_time, 
                            std::vector<int> &csteps_vs_ftime, 
-                           size_t &np_core)
+                           size_t &np_core, 
+                           std::vector<int> &esteps)
 {
     map<diy::BlockID, vector<EndPt>> outgoing_endpts; // needed to call trace_particles() but otherwise unused in iexchange
     // trace_block(b, cp, decomposer, assigner, max_steps, seed_rate, share_face, synth, outgoing_endpts, nsteps);
-    bool val = trace_block_iex(b, cp, cdomain, assigner, max_steps, seed_rate, share_face, synth, outgoing_endpts, nsteps, ntransfers, prediction, time_trace, time_start, step_vs_time, csteps_vs_ftime, np_core);
+    bool val = trace_block_iex(b, cp, cdomain, assigner, max_steps, seed_rate, share_face, synth, outgoing_endpts, nsteps, ntransfers, prediction, time_trace, time_start, step_vs_time, csteps_vs_ftime, np_core, esteps);
     return val;
 }
 
@@ -985,6 +994,8 @@ int main(int argc, char **argv)
     std::vector<int> csteps_vs_ftime(max_steps/32 * 400);
     std::vector<size_t> particles_in_core;
     size_t np_core = 0;
+    std::vector<int> esteps((512/seed_rate)*(512/seed_rate)*(512/seed_rate));
+    std::vector<int> esteps_all(esteps.size());
 
     // check if clocks are synchronized by printing the value of MPI_WTIME_IS_GLOBAL and timing an initial barrier
     // barrier also has the effect of removing any skew in generating or reading the data
@@ -1108,21 +1119,19 @@ int main(int argc, char **argv)
 
                 // sample prediction points
                 master_iex.foreach ([&](Block *b, const diy::Master::ProxyWithLink &cp) {
-                    // std::vector<int> v = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
-                    std::random_device rd;
-                    // std::mt19937 g(rd());
-                    std::mt19937 g(4);
-                    std::shuffle(b->particles.begin(), b->particles.end(), g);
+                    // std::random_device rd;
+                    // std::mt19937 g(4);
+                    // std::shuffle(b->particles.begin(), b->particles.end(), g);
 
-                    size_t pred_size = b->particles.size() / 10;
+                    size_t pred_size = b->particles.size();
                     for (size_t i = 0; i < pred_size; i++)
                     {
-                        b->particles[i].predonly = 1;
+                        b->particles_store.push_back(b->particles[i]);
                     }
 
-                    // init store unpredicted particles?; particles_store used to tag them along 
-                    b->particles_store.insert(std::end(b->particles_store), std::begin(b->particles) + pred_size, std::end(b->particles));
-                    b->particles.resize(pred_size);
+                    // // init store unpredicted particles?; particles_store used to tag them along 
+                    // b->particles_store.insert(std::end(b->particles_store), std::begin(b->particles) + pred_size, std::end(b->particles));
+                    // b->particles.resize(pred_size);
                 });
 
                
@@ -1154,7 +1163,8 @@ int main(int argc, char **argv)
                                                      time_start, 
                                                      step_vs_time, 
                                                      csteps_vs_ftime, 
-                                                     np_core);
+                                                     np_core, 
+                                                     esteps);
                     return val;
                 });
                 np_core = 0;
@@ -1168,15 +1178,20 @@ int main(int argc, char **argv)
                 //     b->particles.clear();
                 // });
 
+                // get esteps from all
+                diy::mpi::reduce(world, esteps, esteps_all, 0, std::plus<int>());
+
+                
+
 
                 // swap b->particles and b->particles_store
                 master_iex.foreach ([&](Block *b, const diy::Master::ProxyWithLink &icp) -> bool {
                     b->particles = std::move(b->particles_store);
+
+                    for (size_t i=0; i<b->particles.size(); i++)
+                        b->particles[i].esteps = esteps_all[i];
                 });
 
-               
-            
-                
                 //rebalance
                 diy::kdtree(master_iex, cassigner, ndims, cdomain, &Block::particles, 2 * 512, false);
 
@@ -1190,6 +1205,7 @@ int main(int argc, char **argv)
 
                 // read data again
                 master_iex.foreach ([&](Block *b, const diy::Master::ProxyWithLink &cp) {
+                    dprint("sizes %ld", b->particles.size());
                     int gid = cp.gid();
                     RCLink *l = static_cast<RCLink *>(cp.link());
 
@@ -1200,33 +1216,33 @@ int main(int argc, char **argv)
                 double time4 = MPI_Wtime();
                 time_readdata = time4 - time3;
 
-                // filter out non prediction particles
-                master_iex.foreach ([&](Block *b, const diy::Master::ProxyWithLink &icp) -> bool {
-                    b->particles_store.clear();
+                // // filter out non prediction particles
+                // master_iex.foreach ([&](Block *b, const diy::Master::ProxyWithLink &icp) -> bool {
+                //     b->particles_store.clear();
 
-                    int block_esteps=0; 
-                    int num_pred = 0; // number of predicted particles
-                    for (size_t i = 0; i < b->particles.size(); i++)
-                    {
-                        if (b->particles[i].predonly == false) // store the to be advected points
-                            b->particles_store.push_back(b->particles[i]);
-                        // else store the expected #steps of an arbitrary predicted particle
-                        else{
+                //     int block_esteps=0; 
+                //     int num_pred = 0; // number of predicted particles
+                //     for (size_t i = 0; i < b->particles.size(); i++)
+                //     {
+                //         if (b->particles[i].predonly == false) // store the to be advected points
+                //             b->particles_store.push_back(b->particles[i]);
+                //         // else store the expected #steps of an arbitrary predicted particle
+                //         else{
                             
-                                block_esteps += b->particles[i].esteps;
-                        }
-                    }
+                //                 block_esteps += b->particles[i].esteps;
+                //         }
+                //     }
 
-                    // block's expected prediction length is average of esteps of all its predicted points
-                    if (num_pred>0)
-                        block_esteps /= num_pred;
+                //     // block's expected prediction length is average of esteps of all its predicted points
+                //     if (num_pred>0)
+                //         block_esteps /= num_pred;
 
-                    for (size_t i=0; i<b->particles_store.size(); i++){
-                        b->particles_store[i].esteps = block_esteps;
-                    }
+                //     for (size_t i=0; i<b->particles_store.size(); i++){
+                //         b->particles_store[i].esteps = block_esteps;
+                //     }
 
-                    b->particles = std::move(b->particles_store);
-                });
+                //     b->particles = std::move(b->particles_store);
+                // });
 
                 world.barrier();
                 double time5 = MPI_Wtime();
@@ -1261,7 +1277,7 @@ int main(int argc, char **argv)
                                                  time_start, 
                                                  step_vs_time, 
                                                  csteps_vs_ftime, 
-                                                 np_core);
+                                                 np_core, esteps);
                 return val;
             });
 
@@ -1371,7 +1387,6 @@ int main(int argc, char **argv)
         std::vector<int> csteps_vs_ftime_all(csteps_vs_ftime.size());
         diy::mpi::reduce(world, csteps_vs_ftime, csteps_vs_ftime_all, 0, std::plus<int>());
     
-        dprint("particles_in_core size %ld", particles_in_core.size());
         std::vector<size_t> particles_in_core_all(particles_in_core.size());
         diy::mpi::reduce(world, particles_in_core, particles_in_core_all, 0, std::plus<size_t>());
 
@@ -1411,7 +1426,6 @@ int main(int argc, char **argv)
                 fprintf(stderr, "%ld ", particles_in_core_all[i]);
             }
             fprintf(stderr, "\n");
-                
 
         }
 
