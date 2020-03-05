@@ -272,10 +272,9 @@ bool trace_particles_iex(Block *b,
     
     //for (auto i = 0; i < b->particles.size(); i++)
 
-    if (prediction)
-        np_core = b->particles.size() + b->particles_pqueue.size(); 
-    else 
-        np_core = -1*(b->particles.size() + b->particles_pqueue.size()); 
+    np_core = b->particles.size() + b->particles_pqueue.size(); 
+    // else 
+    //     np_core = -1*(b->particles.size() + b->particles_pqueue.size()); 
     
      
     std::unique_ptr<EndPt> par (nullptr);
@@ -1167,7 +1166,7 @@ int main(int argc, char **argv)
                                                      esteps);
                     return val;
                 });
-                np_core = 0;
+                np_core = -1;
 
                 time_predrun_loc = MPI_Wtime() - time1;
                 world.barrier();
@@ -1281,6 +1280,7 @@ int main(int argc, char **argv)
                 return val;
             });
 
+            np_core = -1;
 
             time_final_loc = MPI_Wtime() - time6;
             world.barrier();
