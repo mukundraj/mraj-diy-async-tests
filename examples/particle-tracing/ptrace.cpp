@@ -419,10 +419,14 @@ bool trace_particles_iex(Block *b,
     if (prediction==false)
         b->particles_store.clear();
 
-    if (b->particles.size()>0  || b->particles_pqueue.size()>0)
+    if (b->particles.size()>0  || b->particles_pqueue.size()>0){
+        np_core = b->particles.size() + b->particles_pqueue.size(); 
         return false;
-    else
+    }
+    else{
+        np_core = 0;
         return true;
+    }
 }
 
 void deq_incoming_exchange(Block *b,
