@@ -253,7 +253,8 @@ bool trace_particles_iex(Block *b,
                          double &time_trace, 
                          const double &time_start, 
                          std::vector<int> &step_vs_time, 
-                         std::vector<int> &csteps_vs_ftime)
+                         std::vector<int> &csteps_vs_ftime, 
+                         size_t &np_core)
 {
     diy::RegularLink<CBounds> *l = static_cast<diy::RegularLink<CBounds> *>(cp.link());
 
@@ -270,7 +271,13 @@ bool trace_particles_iex(Block *b,
     
     //for (auto i = 0; i < b->particles.size(); i++)
 
-     std::unique_ptr<EndPt> par (nullptr);
+    if (prediction)
+        np_core = b->particles.size() + b->particles_pqueue.size(); 
+    else 
+        np_core = -1*(b->particles.size() + b->particles_pqueue.size()); 
+    
+     
+    std::unique_ptr<EndPt> par (nullptr);
 
     if (b->particles.size()>0){
         // Pt &cur_p = b->particles[i].pt; // current end point
@@ -490,7 +497,8 @@ bool trace_block_iex(Block *b,
                      double &time_trace, 
                      const double &time_start, 
                      std::vector<int> &step_vs_time, 
-                      std::vector<int> &csteps_vs_ftime)
+                      std::vector<int> &csteps_vs_ftime, 
+                      size_t &np_core)
 {
     const int gid = cp.gid();
     diy::RegularLink<Bounds> *l = static_cast<diy::RegularLink<Bounds> *>(cp.link());
@@ -514,7 +522,7 @@ bool trace_block_iex(Block *b,
         // {
             deq_incoming_iexchange(b, cp, prediction);
             // trace_particles(b, cp, decomposer, max_steps, outgoing_endpts, nsteps);
-            val = trace_particles_iex(b, cp, cdomain, max_steps, outgoing_endpts, nsteps, ntransfers, prediction, time_trace, time_start, step_vs_time, csteps_vs_ftime);
+            val = trace_particles_iex(b, cp, cdomain, max_steps, outgoing_endpts, nsteps, ntransfers, prediction, time_trace, time_start, step_vs_time, csteps_vs_ftime, np_core);
             // b->particles.clear();
         // } while (cp.fill_incoming());
     }
@@ -557,11 +565,12 @@ bool trace_block_iexchange(Block *b,
                            double &time_trace,
                            const double &time_start, 
                            std::vector<int> &step_vs_time, 
-                           std::vector<int> &csteps_vs_ftime)
+                           std::vector<int> &csteps_vs_ftime, 
+                           size_t &np_core)
 {
     map<diy::BlockID, vector<EndPt>> outgoing_endpts; // needed to call trace_particles() but otherwise unused in iexchange
     // trace_block(b, cp, decomposer, assigner, max_steps, seed_rate, share_face, synth, outgoing_endpts, nsteps);
-    bool val = trace_block_iex(b, cp, cdomain, assigner, max_steps, seed_rate, share_face, synth, outgoing_endpts, nsteps, ntransfers, prediction, time_trace, time_start, step_vs_time, csteps_vs_ftime);
+    bool val = trace_block_iex(b, cp, cdomain, assigner, max_steps, seed_rate, share_face, synth, outgoing_endpts, nsteps, ntransfers, prediction, time_trace, time_start, step_vs_time, csteps_vs_ftime, np_core);
     return val;
 }
 
@@ -974,6 +983,8 @@ int main(int argc, char **argv)
     std::mutex mutex;
     std::vector<int> step_vs_time((max_steps/32) * 400);
     std::vector<int> csteps_vs_ftime(max_steps/32 * 400);
+    std::vector<size_t> particles_in_core;
+    size_t np_core = 0;
 
     // check if clocks are synchronized by printing the value of MPI_WTIME_IS_GLOBAL and timing an initial barrier
     // barrier also has the effect of removing any skew in generating or reading the data
@@ -1073,9 +1084,12 @@ int main(int argc, char **argv)
                         std::this_thread::sleep_for( std::chrono::milliseconds(1000));
                         {
                              std::lock_guard<std::mutex> guard(mutex);
+
+                             particles_in_core.push_back(np_core);
                              if (steps_per_interval.size()>0){
                                 steps_per_interval.push_back(nsteps - nsteps_lagged);
                                 nsteps_lagged = nsteps;
+                                
                              }
                              else
                                 steps_per_interval.push_back(nsteps);
@@ -1139,9 +1153,11 @@ int main(int argc, char **argv)
                                                      time_trace, 
                                                      time_start, 
                                                      step_vs_time, 
-                                                     csteps_vs_ftime);
+                                                     csteps_vs_ftime, 
+                                                     np_core);
                     return val;
                 });
+                np_core = 0;
 
                 time_predrun_loc = MPI_Wtime() - time1;
                 world.barrier();
@@ -1244,7 +1260,8 @@ int main(int argc, char **argv)
                                                  time_trace, 
                                                  time_start, 
                                                  step_vs_time, 
-                                                 csteps_vs_ftime);
+                                                 csteps_vs_ftime, 
+                                                 np_core);
                 return val;
             });
 
@@ -1353,6 +1370,10 @@ int main(int argc, char **argv)
 
         std::vector<int> csteps_vs_ftime_all(csteps_vs_ftime.size());
         diy::mpi::reduce(world, csteps_vs_ftime, csteps_vs_ftime_all, 0, std::plus<int>());
+    
+        dprint("particles_in_core size %ld", particles_in_core.size());
+        std::vector<size_t> particles_in_core_all(particles_in_core.size());
+        diy::mpi::reduce(world, particles_in_core, particles_in_core_all, 0, std::plus<size_t>());
 
 
         float avg = float(nsteps_global) / world.size();
@@ -1382,6 +1403,12 @@ int main(int argc, char **argv)
             fprintf(stderr, "csteps_vs_ftime, p, %d, ws, %d, ", prediction, world.size());
             for (size_t i=0; i<csteps_vs_ftime.size(); i++){
                 fprintf(stderr, "%d ", csteps_vs_ftime_all[i]);
+            }
+            fprintf(stderr, "\n");
+
+            fprintf(stderr, "particles_in_core, p, %d, ws, %d, ", prediction, world.size());
+            for (size_t i=0; i<particles_in_core_all.size(); i++){
+                fprintf(stderr, "%ld ", particles_in_core_all[i]);
             }
             fprintf(stderr, "\n");
                 
