@@ -84,6 +84,7 @@ struct EndPt
     double st_time;                         // start time of a particle
     int esteps;                             // expected number of steps (decided priority)
     Pt pt_home;                             // coordinates of home point (only used during prediction run)
+    int nhops;                               // trackes of interprocess hops
 
     const float& operator [](int i) const { return pt.coords[i]; }
     float& operator [](int i)             { return pt.coords[i]; }
@@ -95,6 +96,7 @@ struct EndPt
             nsteps   = 0;
             predonly = 0;
             esteps   = 0;
+            nhops    = 0;
         }
     EndPt(struct Segment& s);                // extract the end point of a segment
 };
