@@ -256,7 +256,9 @@ bool trace_particles_iex(Block *b,
                          std::vector<int> &csteps_vs_ftime, 
                          std::vector<int> &fhops_vs_ftime, 
                          size_t &np_core, 
-                         std::vector<int> &esteps)
+                         std::vector<int> &esteps, 
+                         std::vector<int> &final_ids, 
+                         std::vector<double> &final_ids_time)
 {
     diy::RegularLink<CBounds> *l = static_cast<diy::RegularLink<CBounds> *>(cp.link());
 
@@ -380,6 +382,15 @@ bool trace_particles_iex(Block *b,
 
             cidx = binf*max_steps/8+par->nhops/8;
             fhops_vs_ftime[cidx] += 1;
+
+
+            if (final_ids.size()<20){
+                final_ids.push_back(par->pid);
+                final_ids_time.push_back(time_pend);
+            }else{
+                final_ids[b->done%20] = par->pid;
+                final_ids_time[b->done%20] = time_pend;
+            }
 
 
         }
@@ -515,7 +526,9 @@ bool trace_block_iex(Block *b,
                       std::vector<int> &csteps_vs_ftime, 
                       std::vector<int> &fhops_vs_ftime, 
                       size_t &np_core, 
-                      std::vector<int> &esteps)
+                      std::vector<int> &esteps, 
+                      std::vector<int> &final_ids, 
+                      std::vector<double> &final_ids_time)
 {
     const int gid = cp.gid();
     diy::RegularLink<Bounds> *l = static_cast<diy::RegularLink<Bounds> *>(cp.link());
@@ -539,7 +552,7 @@ bool trace_block_iex(Block *b,
         // {
             deq_incoming_iexchange(b, cp, prediction);
             // trace_particles(b, cp, decomposer, max_steps, outgoing_endpts, nsteps);
-            val = trace_particles_iex(b, cp, cdomain, max_steps, outgoing_endpts, nsteps, ntransfers, prediction, time_trace, time_start, step_vs_time, csteps_vs_ftime, fhops_vs_ftime, np_core, esteps);
+            val = trace_particles_iex(b, cp, cdomain, max_steps, outgoing_endpts, nsteps, ntransfers, prediction, time_trace, time_start, step_vs_time, csteps_vs_ftime, fhops_vs_ftime, np_core, esteps, final_ids, final_ids_time);
             // b->particles.clear();
         // } while (cp.fill_incoming());
     }
@@ -585,11 +598,13 @@ bool trace_block_iexchange(Block *b,
                            std::vector<int> &csteps_vs_ftime, 
                            std::vector<int> &fhops_vs_ftime, 
                            size_t &np_core, 
-                           std::vector<int> &esteps)
+                           std::vector<int> &esteps, 
+                           std::vector<int> &final_ids, 
+                           std::vector<double> &final_ids_time)
 {
     map<diy::BlockID, vector<EndPt>> outgoing_endpts; // needed to call trace_particles() but otherwise unused in iexchange
     // trace_block(b, cp, decomposer, assigner, max_steps, seed_rate, share_face, synth, outgoing_endpts, nsteps);
-    bool val = trace_block_iex(b, cp, cdomain, assigner, max_steps, seed_rate, share_face, synth, outgoing_endpts, nsteps, ntransfers, prediction, time_trace, time_start, step_vs_time, csteps_vs_ftime, fhops_vs_ftime, np_core, esteps);
+    bool val = trace_block_iex(b, cp, cdomain, assigner, max_steps, seed_rate, share_face, synth, outgoing_endpts, nsteps, ntransfers, prediction, time_trace, time_start, step_vs_time, csteps_vs_ftime, fhops_vs_ftime, np_core, esteps, final_ids, final_ids_time);
     return val;
 }
 
@@ -884,6 +899,29 @@ void output_profile(
     }
 }
 
+void pairsort(std::vector<double> &a, std::vector<int> &b, int n) 
+{ 
+    pair<double, int> pairt[n]; 
+  
+    // Storing the respective array 
+    // elements in pairs. 
+    for (int i = 0; i < n; i++)  
+    { 
+        pairt[i].first = a[i]; 
+        pairt[i].second = b[i]; 
+    } 
+  
+    // Sorting the pair array. 
+    sort(pairt, pairt + n); 
+      
+    // Modifying original arrays 
+    for (int i = 0; i < n; i++)  
+    { 
+        a[i] = pairt[i].first; 
+        b[i] = pairt[i].second; 
+    } 
+} 
+
 int main(int argc, char **argv)
 {
     signal(SIGSEGV, catch_sig); // catch segfault
@@ -1009,6 +1047,8 @@ int main(int argc, char **argv)
     std::vector<int> esteps_all(esteps.size());
     int ndone=0;
     std::vector<int> done_counts; // for tracking number of particles done each second
+    std::vector<int> final_ids; // ids of particles finishing in the end
+    std::vector<double> final_ids_time; // finishting times of particles finishing in the end
 
     // check if clocks are synchronized by printing the value of MPI_WTIME_IS_GLOBAL and timing an initial barrier
     // barrier also has the effect of removing any skew in generating or reading the data
@@ -1020,6 +1060,16 @@ int main(int argc, char **argv)
     master.prof << "initial barrier";
     world.barrier();
     master.prof >> "initial barrier";
+
+
+    diy::Master master_iex(world,
+                                   nthreads,
+                                   mblocks,
+                                   &Block::create,
+                                   &Block::destroy,
+                                   &storage,
+                                   &Block::save,
+                                   &Block::load);
 
     // run the trials
     for (int trial = 0; trial < ntrials; trial++)
@@ -1041,19 +1091,12 @@ int main(int argc, char **argv)
         world.barrier();
         double time_start = MPI_Wtime();
 
-
+         
 
         if (IEXCHANGE)
         {
 
-            diy::Master master_iex(world,
-                                   nthreads,
-                                   mblocks,
-                                   &Block::create,
-                                   &Block::destroy,
-                                   &storage,
-                                   &Block::save,
-                                   &Block::load);
+           
             diy::ContiguousAssigner cassigner(world.size(), nblocks);
 
             CDecomposer cdecomposer(ndims,
@@ -1178,7 +1221,9 @@ int main(int argc, char **argv)
                                                      csteps_vs_ftime, 
                                                      fhops_vs_ftime,
                                                      np_core, 
-                                                     esteps);
+                                                     esteps, 
+                                                     final_ids, 
+                                                     final_ids_time);
                     return val;
                 });
                 np_core = -1;
@@ -1292,7 +1337,9 @@ int main(int argc, char **argv)
                                                  step_vs_time, 
                                                  csteps_vs_ftime, 
                                                  fhops_vs_ftime,
-                                                 np_core, esteps);
+                                                 np_core, esteps, 
+                                                 final_ids, 
+                                                 final_ids_time);
                 return val;
             });
 
@@ -1408,6 +1455,13 @@ int main(int argc, char **argv)
 
         std::vector<int> fhops_vs_ftime_all (fhops_vs_ftime.size());
         diy::mpi::reduce(world, fhops_vs_ftime, fhops_vs_ftime_all, 0, std::plus<int>());
+        
+        std::vector<std::vector<int>> final_ids_all;
+        diy::mpi::gather(world, final_ids, final_ids_all, 0);
+
+
+        std::vector<std::vector<double>> final_ids_time_all;
+        diy::mpi::gather(world, final_ids_time, final_ids_time_all, 0);
 
 
         float avg = float(nsteps_global) / world.size();
@@ -1453,6 +1507,25 @@ int main(int argc, char **argv)
             }
             fprintf(stderr, "\n");
 
+            for (size_t i=1; i<final_ids_all.size(); i++){
+                for (size_t j=0; j<final_ids_all[i].size(); j++){
+                    final_ids.push_back(final_ids_all[i][j]);
+                    final_ids_time.push_back(final_ids_time_all[i][j]);
+                }
+
+            }            
+            pairsort(final_ids_time, final_ids, (int)final_ids.size());
+            dprint("finalids %ld", final_ids_all.size());
+            int numitems = 20;
+            if (final_ids.size()>numitems){
+                for (int i=0; i<numitems;i++){
+                    dprint("lastpart, %d, %d", i, final_ids[final_ids.size()-1-i]);
+                }
+            }
+
+
+            
+
         }
 
         //         master.prof.totals().output(std::cerr);
@@ -1474,7 +1547,7 @@ int main(int argc, char **argv)
 
     // write trajectory segments for validation
     if (check)
-        write_traces(master, assigner, decomposer);
+        write_traces(master_iex, assigner, decomposer);
 
     // debug
     //     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)

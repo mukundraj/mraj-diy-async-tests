@@ -138,7 +138,7 @@ struct Block
         f.open(filename);
 
         // debug
-//         fmt::print("writing {} segments\n", segments.size());
+        fmt::print("writing {} segments\n", segments.size());
 
         for (size_t i = 0; i < segments.size(); i++)
         {
