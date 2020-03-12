@@ -17,7 +17,7 @@
 exe=./ptrace-iexchange
 
 # inout file
-infile="/nfs/proj-tpeterka/jiang/data/isabel0.nc"
+infile="/home/mraj/datasets/isabel/isabel0.nc"
 
 # max number of advection steps
 max_steps=1024
