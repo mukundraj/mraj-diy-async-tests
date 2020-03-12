@@ -128,8 +128,8 @@ void CInitSeeds(Block *b,
                 p[0] = i; p.pt_home.coords[0] = i;
                 p[1] = j; p.pt_home.coords[1] = j;
                 p[2] = k; p.pt_home.coords[2] = k;
-                // if (p.pid==107)
-                b->particles.push_back(p);
+                if (p.pid==82254 || p.pid == 409970 || p.pid == 1198076 || p.pid == 393684 || p.pid == 1118587 || p.pid == 540896 || p.pid== 1366253 || p.pid == 17185 || p.pid == 1366377 || p.pid == 1167102 || p.pid==622953 || p.pid == 1000701 || p.pid == 902008 || p.pid == 886262 || p.pid == 1035510 || p.pid == 721259 || p.pid == 1299188 || p.pid == 475355 || p.pid == 164200 || p.pid == 869627)
+                    b->particles.push_back(p);
                 b->init++;
                 // dprint("init %d: (%f %f %f)", p.pid, p[0], p[1], p[2]);
             }
