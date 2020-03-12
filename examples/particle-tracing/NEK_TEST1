@@ -7,8 +7,9 @@ num_procs=4
 exe=./ptrace-iexchange
 
 # inout file
-infile="/nfs/proj-tpeterka/hguo/data/nek5000.nc"
+# infile="/nfs/proj-tpeterka/hguo/data/nek5000.nc"
 # infile="/home/mraj/datasets/nek/nek5000.nc"
+infile="/nfs/proj-tpeterka/jiang/data/isabel0.nc"
 
 # max number of advection steps
 max_steps=1024
@@ -19,7 +20,8 @@ sr=16
 
 # domain extents
 mins="0 0 0"
-maxs="511 511 511"
+# maxs="511 511 511"
+maxs="499 499 99"
 
 # without prediction
 prediction=0
