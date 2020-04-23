@@ -59,18 +59,33 @@ prediction=0
 # args="$opts $infile $max_steps $sr $mins $maxs $prediction"
 # mpiexec -n $num_procs $exe $args
 
-num_procs=64
-opts="--blocks 64 --max-rounds 9999 --synthetic 0 --check 0"
+# num_procs=64
+# opts="--blocks 64 --max-rounds 9999 --synthetic 0 --check 0"
+# args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+# mpiexec -n $num_procs $exe $args
+
+# num_procs=128
+# opts="--blocks 128 --max-rounds 9999 --synthetic 0 --check 0"
+# args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+# mpiexec -n $num_procs $exe $args
+
+
+# num_procs=256
+# opts="--blocks 256 --max-rounds 9999 --synthetic 0 --check 0"
+# args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+# mpiexec -n $num_procs $exe $args
+
+num_procs=512
+opts="--blocks 512 --max-rounds 9999 --synthetic 0 --check 0"
 args="$opts $infile $max_steps $sr $mins $maxs $prediction"
 mpiexec -n $num_procs $exe $args
-num_procs=128
-opts="--blocks 128 --max-rounds 9999 --synthetic 0 --check 0"
-args="$opts $infile $max_steps $sr $mins $maxs $prediction"
-mpiexec -n $num_procs $exe $args
-num_procs=256
-opts="--blocks 256 --max-rounds 9999 --synthetic 0 --check 0"
-args="$opts $infile $max_steps $sr $mins $maxs $prediction"
-mpiexec -n $num_procs $exe $args
+
+
+# num_procs=2048
+# opts="--blocks 2048 --max-rounds 9999 --synthetic 0 --check 0"
+# args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+# mpiexec -n $num_procs $exe $args
+
 
 # with prediction
 prediction=1
@@ -100,17 +115,28 @@ prediction=1
 # args="$opts $infile $max_steps $sr $mins $maxs $prediction"
 # mpiexec -n $num_procs $exe $args
 
-num_procs=64
-opts="--blocks 64 --max-rounds 9999 --synthetic 0 --check 0"
+# num_procs=64
+# opts="--blocks 64 --max-rounds 9999 --synthetic 0 --check 0"
+# args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+# mpiexec -n $num_procs $exe $args
+
+# num_procs=128
+# opts="--blocks 128 --max-rounds 9999 --synthetic 0 --check 0"
+# args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+# mpiexec -n $num_procs $exe $args
+
+# num_procs=256
+# opts="--blocks 256 --max-rounds 9999 --synthetic 0 --check 0"
+# args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+# mpiexec -n $num_procs $exe $args
+
+num_procs=512
+opts="--blocks 512 --max-rounds 9999 --synthetic 0 --check 0"
 args="$opts $infile $max_steps $sr $mins $maxs $prediction"
 mpiexec -n $num_procs $exe $args
 
-num_procs=128
-opts="--blocks 128 --max-rounds 9999 --synthetic 0 --check 0"
-args="$opts $infile $max_steps $sr $mins $maxs $prediction"
-mpiexec -n $num_procs $exe $args
+# num_procs=2048
+# opts="--blocks 2048 --max-rounds 9999 --synthetic 0 --check 0"
+# args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+# mpiexec -n $num_procs $exe $args
 
-num_procs=256
-opts="--blocks 256 --max-rounds 9999 --synthetic 0 --check 0"
-args="$opts $infile $max_steps $sr $mins $maxs $prediction"
-mpiexec -n $num_procs $exe $args

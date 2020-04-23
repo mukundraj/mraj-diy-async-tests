@@ -327,16 +327,17 @@ bool trace_particles_iex(Block *b,
                 break;
             }
 
-            // // if predicting, add copy coordinates to EndPt and add to b->particles_store
+            // if predicting, add copy coordinates to EndPt and add to b->particles_store
             // if (prediction == true && cinside(cur_p, cdomain) && nsteps % 2 == 0)
-            // {   
-            //     EndPt way_pt;
-            //     way_pt[0] = cur_p.coords[0];
-            //     way_pt[1] = cur_p.coords[1];
-            //     way_pt[2] = cur_p.coords[2];
-            //     way_pt.predonly = true;
-            //     b->particles_store.push_back(way_pt);
-            // }
+            if (prediction == true && cinside(cur_p, cdomain))
+            {   
+                EndPt way_pt;
+                way_pt[0] = cur_p.coords[0];
+                way_pt[1] = cur_p.coords[1];
+                way_pt[2] = cur_p.coords[2];
+                way_pt.predonly = true;
+                b->particles_store.push_back(way_pt);
+            }
 
         }
 
@@ -1132,19 +1133,19 @@ int main(int argc, char **argv)
 
                 // sample prediction points
                 master_iex.foreach ([&](Block *b, const diy::Master::ProxyWithLink &cp) {
-                    // std::random_device rd;
-                    // std::mt19937 g(4);
-                    // std::shuffle(b->particles.begin(), b->particles.end(), g);
+                    std::random_device rd;
+                    std::mt19937 g(4);
+                    std::shuffle(b->particles.begin(), b->particles.end(), g);
 
-                    size_t pred_size = b->particles.size();
-                    for (size_t i = 0; i < pred_size; i++)
-                    {
-                        b->particles_store.push_back(b->particles[i]);
-                    }
+                    size_t pred_size = b->particles.size()/10;
+                    // for (size_t i = 0; i < pred_size; i++)
+                    // {
+                    //     b->particles_store.push_back(b->particles[i]);
+                    // }
 
-                    // // init store unpredicted particles?; particles_store used to tag them along 
-                    // b->particles_store.insert(std::end(b->particles_store), std::begin(b->particles) + pred_size, std::end(b->particles));
-                    // b->particles.resize(pred_size);
+                    // init store unpredicted particles?; particles_store used to tag them along 
+                    b->particles_store.insert(std::end(b->particles_store), std::begin(b->particles) + pred_size, std::end(b->particles));
+                    b->particles.resize(pred_size);
                 });
 
                
@@ -1202,12 +1203,12 @@ int main(int argc, char **argv)
                 master_iex.foreach ([&](Block *b, const diy::Master::ProxyWithLink &icp) -> bool {
                     b->particles = std::move(b->particles_store);
 
-                    for (size_t i=0; i<b->particles.size(); i++)
-                        b->particles[i].esteps = esteps_all[i];
+                    // for (size_t i=0; i<b->particles.size(); i++)
+                    //     b->particles[i].esteps = esteps_all[i];
                 });
 
                 //rebalance
-                diy::kdtree(master_iex, cassigner, ndims, cdomain, &Block::particles, 2 * 512, false);
+                diy::kdtree(master_iex, cassigner, ndims, cdomain, &Block::particles, 512, false);
 
                  world.barrier();
                  double time3 = MPI_Wtime();
@@ -1230,33 +1231,34 @@ int main(int argc, char **argv)
                 double time4 = MPI_Wtime();
                 time_readdata = time4 - time3;
 
-                // // filter out non prediction particles
-                // master_iex.foreach ([&](Block *b, const diy::Master::ProxyWithLink &icp) -> bool {
-                //     b->particles_store.clear();
+                // filter out non prediction particles
+                master_iex.foreach ([&](Block *b, const diy::Master::ProxyWithLink &icp) -> bool {
+                    b->particles_store.clear();
 
-                //     int block_esteps=0; 
-                //     int num_pred = 0; // number of predicted particles
-                //     for (size_t i = 0; i < b->particles.size(); i++)
-                //     {
-                //         if (b->particles[i].predonly == false) // store the to be advected points
-                //             b->particles_store.push_back(b->particles[i]);
-                //         // else store the expected #steps of an arbitrary predicted particle
-                //         else{
+                    int block_esteps=0; 
+                    int num_pred = 0; // number of predicted particles
+                    for (size_t i = 0; i < b->particles.size(); i++)
+                    {
+                        if (b->particles[i].predonly == false){ // store the to be advected points
+                            b->particles_store.push_back(b->particles[i]);
+                        // else store the expected #steps of an arbitrary predicted particle
+                        }
+                        // else{
                             
-                //                 block_esteps += b->particles[i].esteps;
-                //         }
-                //     }
+                        //         block_esteps += b->particles[i].esteps;
+                        // }
+                    }
 
-                //     // block's expected prediction length is average of esteps of all its predicted points
-                //     if (num_pred>0)
-                //         block_esteps /= num_pred;
+                    // // block's expected prediction length is average of esteps of all its predicted points
+                    // if (num_pred>0)
+                    //     block_esteps /= num_pred;
 
-                //     for (size_t i=0; i<b->particles_store.size(); i++){
-                //         b->particles_store[i].esteps = block_esteps;
-                //     }
+                    // for (size_t i=0; i<b->particles_store.size(); i++){
+                    //     b->particles_store[i].esteps = block_esteps;
+                    // }
 
-                //     b->particles = std::move(b->particles_store);
-                // });
+                    b->particles = std::move(b->particles_store);
+                });
 
                 world.barrier();
                 double time5 = MPI_Wtime();

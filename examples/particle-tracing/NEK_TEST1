@@ -9,13 +9,14 @@ exe=./ptrace-iexchange
 # inout file
 # infile="/nfs/proj-tpeterka/hguo/data/nek5000.nc"
 # infile="/home/mraj/datasets/nek/nek5000.nc"
-infile="/nfs/proj-tpeterka/jiang/data/isabel0.nc"
+# infile="/nfs/proj-tpeterka/jiang/data/isabel0.nc"
+infile="/home/mraj/datasets/isabel/isabel0.nc"
 
 # max number of advection steps
 max_steps=1024
 
 # seed rate (seed particles every this many grid points in each dimension)
-sr=16
+sr=3
 # sr=128
 
 # domain extents
@@ -41,16 +42,22 @@ prediction=0
 # args="$opts $infile $max_steps $sr $mins $maxs $prediction"
 # mpiexec -n $num_procs $exe $args 
 
-num_procs=16
-opts="--blocks 16 --max-rounds 9999 --synthetic 0 --check 0"
+# num_procs=16
+# opts="--blocks 16 --max-rounds 9999 --synthetic 0 --check 0"
+# args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+# mpiexec -n $num_procs $exe $args 
+
+# num_procs=32
+# opts="--blocks 32 --max-rounds 9999 --synthetic 0 --check 0"
+# args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+# mpiexec -n $num_procs valgrind --leak-check=full \
+#     --show-reachable=yes --track-origins=yes --log-file=nc.vg.%p $exe $args 
+
+num_procs=32
+opts="--blocks 32 --max-rounds 9999 --synthetic 0 --check 0"
 args="$opts $infile $max_steps $sr $mins $maxs $prediction"
 mpiexec -n $num_procs $exe $args 
 
-## num_procs=32
-## opts="--blocks 32 --max-rounds 9999 --synthetic 0 --check 0"
-## args="$opts $infile $max_steps $sr $mins $maxs $prediction"
-## mpiexec -n $num_procs valgrind --leak-check=full \
-##     --show-reachable=yes --track-origins=yes --log-file=nc.vg.%p $exe $args 
 
 # num_procs=64
 # opts="--blocks 64 --max-rounds 9999 --synthetic 0 --check 0"
@@ -85,6 +92,11 @@ prediction=1
 # opts="--blocks 32 --max-rounds 9999 --synthetic 0 --check 0"
 # args="$opts $infile $max_steps $sr $mins $maxs $prediction"
 # mpiexec -n $num_procs $exe $args 
+
+num_procs=32
+opts="--blocks 32 --max-rounds 9999 --synthetic 0 --check 0"
+args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+mpiexec -n $num_procs $exe $args 
 
 # num_procs=64
 # opts="--blocks 64 --max-rounds 9999 --synthetic 0 --check 0"
