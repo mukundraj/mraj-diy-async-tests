@@ -4,7 +4,7 @@
 #SBATCH --account=pedal
 #SBATCH --partition=knlall
 #SBATCH --constraint knl,quad,cache
-#SBATCH --nodes=32
+#SBATCH --nodes=64
 #SBATCH --ntasks-per-node=32
 #SBATCH --output=p0.%j.%N.out
 #SBATCH --error=p0.%j.%N.error
@@ -79,15 +79,15 @@ prediction=0
 # args="$opts $infile $max_steps $sr $mins $maxs $prediction"
 # mpiexec -n $num_procs $exe $args
 
-num_procs=1024
-opts="--blocks 1024 --max-rounds 9999 --synthetic 0 --check 0"
-args="$opts $infile $max_steps $sr $mins $maxs $prediction"
-mpiexec -n $num_procs $exe $args
-
-# num_procs=2048
-# opts="--blocks 2048 --max-rounds 9999 --synthetic 0 --check 0"
+# num_procs=1024
+# opts="--blocks 1024 --max-rounds 9999 --synthetic 0 --check 0"
 # args="$opts $infile $max_steps $sr $mins $maxs $prediction"
 # mpiexec -n $num_procs $exe $args
+
+num_procs=2048
+opts="--blocks 2048 --max-rounds 9999 --synthetic 0 --check 0"
+args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+mpiexec -n $num_procs $exe $args
 
 # with prediction
 prediction=1
@@ -137,12 +137,12 @@ prediction=1
 # args="$opts $infile $max_steps $sr $mins $maxs $prediction"
 # mpiexec -n $num_procs $exe $args
 
-num_procs=1024
-opts="--blocks 1024 --max-rounds 9999 --synthetic 0 --check 0"
-args="$opts $infile $max_steps $sr $mins $maxs $prediction"
-mpiexec -n $num_procs $exe $args
-
-# num_procs=2048
-# opts="--blocks 2048 --max-rounds 9999 --synthetic 0 --check 0"
+# num_procs=1024
+# opts="--blocks 1024 --max-rounds 9999 --synthetic 0 --check 0"
 # args="$opts $infile $max_steps $sr $mins $maxs $prediction"
 # mpiexec -n $num_procs $exe $args
+
+num_procs=2048
+opts="--blocks 2048 --max-rounds 9999 --synthetic 0 --check 0"
+args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+mpiexec -n $num_procs $exe $args

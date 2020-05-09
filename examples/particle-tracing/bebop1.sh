@@ -4,12 +4,12 @@
 #SBATCH --account=pedal
 #SBATCH --partition=knlall
 #SBATCH --constraint knl,quad,cache
-#SBATCH --nodes=8
+#SBATCH --nodes=64
 #SBATCH --ntasks-per-node=32
 #SBATCH --output=p0.%j.%N.out
 #SBATCH --error=p0.%j.%N.error
 #SBATCH --mail-user=mraj@anl.gov
-#SBATCH --time=02:00:00
+#SBATCH --time=00:30:00
 
 # number of procs
 
@@ -75,16 +75,20 @@ prediction=0
 # args="$opts $infile $max_steps $sr $mins $maxs $prediction"
 # mpiexec -n $num_procs $exe $args
 
-num_procs=512
-opts="--blocks 512 --max-rounds 9999 --synthetic 0 --check 0"
-args="$opts $infile $max_steps $sr $mins $maxs $prediction"
-mpiexec -n $num_procs $exe $args
-
-
-# num_procs=2048
-# opts="--blocks 2048 --max-rounds 9999 --synthetic 0 --check 0"
+# num_procs=512
+# opts="--blocks 512 --max-rounds 9999 --synthetic 0 --check 0"
 # args="$opts $infile $max_steps $sr $mins $maxs $prediction"
 # mpiexec -n $num_procs $exe $args
+
+# num_procs=1024
+# opts="--blocks 1024 --max-rounds 9999 --synthetic 0 --check 0"
+# args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+# mpiexec -n $num_procs $exe $args
+
+num_procs=2048
+opts="--blocks 2048 --max-rounds 9999 --synthetic 0 --check 0"
+args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+mpiexec -n $num_procs $exe $args
 
 
 # with prediction
@@ -130,13 +134,18 @@ prediction=1
 # args="$opts $infile $max_steps $sr $mins $maxs $prediction"
 # mpiexec -n $num_procs $exe $args
 
-num_procs=512
-opts="--blocks 512 --max-rounds 9999 --synthetic 0 --check 0"
-args="$opts $infile $max_steps $sr $mins $maxs $prediction"
-mpiexec -n $num_procs $exe $args
-
-# num_procs=2048
-# opts="--blocks 2048 --max-rounds 9999 --synthetic 0 --check 0"
+# num_procs=512
+# opts="--blocks 512 --max-rounds 9999 --synthetic 0 --check 0"
 # args="$opts $infile $max_steps $sr $mins $maxs $prediction"
 # mpiexec -n $num_procs $exe $args
+
+# num_procs=1024
+# opts="--blocks 1024 --max-rounds 9999 --synthetic 0 --check 0"
+# args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+# mpiexec -n $num_procs $exe $args
+
+num_procs=2048
+opts="--blocks 2048 --max-rounds 9999 --synthetic 0 --check 0"
+args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+mpiexec -n $num_procs $exe $args
 

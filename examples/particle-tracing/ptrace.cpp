@@ -328,8 +328,7 @@ bool trace_particles_iex(Block *b,
             }
 
             // if predicting, add copy coordinates to EndPt and add to b->particles_store
-            // if (prediction == true && cinside(cur_p, cdomain) && nsteps % 2 == 0)
-            if (prediction == true && cinside(cur_p, cdomain))
+            if (prediction == true && cinside(cur_p, cdomain) && nsteps % 2 == 0)
             {   
                 EndPt way_pt;
                 way_pt[0] = cur_p.coords[0];
@@ -1124,8 +1123,12 @@ int main(int argc, char **argv)
                 
             });
 
+            std::random_device rd;
+            std::mt19937 g(5);
+            master_iex.foreach ([&](Block *b, const diy::Master::ProxyWithLink &cp) {
+                std::shuffle(b->particles.begin(), b->particles.end(), g);
+            });
 
-            
             if (prediction)
             {
                 world.barrier();
@@ -1133,11 +1136,9 @@ int main(int argc, char **argv)
 
                 // sample prediction points
                 master_iex.foreach ([&](Block *b, const diy::Master::ProxyWithLink &cp) {
-                    std::random_device rd;
-                    std::mt19937 g(4);
-                    std::shuffle(b->particles.begin(), b->particles.end(), g);
-
+                    
                     size_t pred_size = b->particles.size()/10;
+                    // dprint("pred_size %ld", pred_size);
                     // for (size_t i = 0; i < pred_size; i++)
                     // {
                     //     b->particles_store.push_back(b->particles[i]);
@@ -1194,7 +1195,7 @@ int main(int argc, char **argv)
                 // });
 
                 // get esteps from all
-                diy::mpi::reduce(world, esteps, esteps_all, 0, std::plus<int>());
+                // diy::mpi::reduce(world, esteps, esteps_all, 0, std::plus<int>());
 
                 
 
