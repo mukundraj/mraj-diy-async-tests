@@ -43,10 +43,10 @@ prediction=0
 # args="$opts $infile $max_steps $sr $mins $maxs $prediction"
 # mpiexec -n $num_procs $exe $args 
 
-# num_procs=16
-# opts="--blocks 16 --max-rounds 9999 --synthetic 0 --check 0"
-# args="$opts $infile $max_steps $sr $mins $maxs $prediction"
-# mpiexec -n $num_procs $exe $args 
+num_procs=16
+opts="--blocks 16 --max-rounds 9999 --synthetic 0 --check 0"
+args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+mpiexec -n $num_procs $exe $args 
 
 # num_procs=32
 # opts="--blocks 32 --max-rounds 9999 --synthetic 0 --check 0"
@@ -54,10 +54,10 @@ prediction=0
 # mpiexec -n $num_procs valgrind --leak-check=full \
 #     --show-reachable=yes --track-origins=yes --log-file=nc.vg.%p $exe $args 
 
-num_procs=32
-opts="--blocks 32 --max-rounds 9999 --synthetic 0 --check 0"
-args="$opts $infile $max_steps $sr $mins $maxs $prediction"
-mpiexec -n $num_procs $exe $args 
+# num_procs=32
+# opts="--blocks 32 --max-rounds 9999 --synthetic 0 --check 0"
+# args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+# mpiexec -n $num_procs $exe $args 
 
 
 # num_procs=64
@@ -84,20 +84,20 @@ prediction=1
 # args="$opts $infile $max_steps $sr $mins $maxs $prediction"
 # mpiexec -n $num_procs $exe $args
 
-# num_procs=16
-# opts="--blocks 16 --max-rounds 9999 --synthetic 0 --check 0"
-# args="$opts $infile $max_steps $sr $mins $maxs $prediction"
-# mpiexec -n $num_procs $exe $args
+num_procs=16
+opts="--blocks 16 --max-rounds 9999 --synthetic 0 --check 0"
+args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+mpiexec -n $num_procs $exe $args
 
 # num_procs=32
 # opts="--blocks 32 --max-rounds 9999 --synthetic 0 --check 0"
 # args="$opts $infile $max_steps $sr $mins $maxs $prediction"
 # mpiexec -n $num_procs $exe $args 
 
-num_procs=32
-opts="--blocks 32 --max-rounds 9999 --synthetic 0 --check 0"
-args="$opts $infile $max_steps $sr $mins $maxs $prediction"
-mpiexec -n $num_procs $exe $args 
+# num_procs=32
+# opts="--blocks 32 --max-rounds 9999 --synthetic 0 --check 0"
+# args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+# mpiexec -n $num_procs $exe $args 
 
 # num_procs=64
 # opts="--blocks 64 --max-rounds 9999 --synthetic 0 --check 0"
