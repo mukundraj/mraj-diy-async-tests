@@ -3,7 +3,8 @@
 
 #include <vector>
 #include <map>
+#include <diy/mpi.hpp>
 
-void read_data(std::map<int, std::vector<float>> &data, std::vector<int> &weights);
+void read_data(diy::mpi::communicator& world, const char*  infile_, std::map<int, std::vector<float>> &data, std::vector<int> &weights, int C, int *bside);
 
 #endif

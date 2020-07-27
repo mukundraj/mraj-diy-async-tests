@@ -60,6 +60,8 @@ using namespace std;
 #include "btrace/message.h"
 #include "btrace/io.h"
 
+#include "btrace/bblock.hpp"
+
 // debugging: catches segfaults and dumps a backtrace
 // copied from Dmitriy's henson/henson-chai.cpp
 
@@ -141,6 +143,26 @@ void catch_sig(int signum)
         MPI_Abort(MPI_COMM_WORLD, 1);
 }
 
+// dequeue remote data
+// there is still a link, but exchange(remote = true) exchanged messages from any block
+void remote_deq(BBlock* b, const diy::Master::ProxyWithLink& cp)
+{
+    std::vector<int> incoming_gids;
+    cp.incoming(incoming_gids);
+    for (size_t i = 0; i < incoming_gids.size(); i++)
+        if (cp.incoming(incoming_gids[i]).size())
+        {
+            // int recvd_data;
+            datablock recvd_data;
+            cp.dequeue(incoming_gids[i], recvd_data);
+            fmt::print(stderr, "Remote dequeue: gid {} received value {} from gid {}\n", cp.gid(), recvd_data.data.size(), recvd_data.from_proc);
+            for (size_t i=0; i<recvd_data.cgid.size(); i++){
+                b->data[recvd_data.cgid[i]] = recvd_data.data[i];
+            }
+        }
+}
+
+
 int main(int argc, char **argv){
 
     signal(SIGSEGV, catch_sig); // catch segfault
@@ -156,22 +178,14 @@ int main(int argc, char **argv){
 
     using namespace opts;
 
-    float ver;
-	int rc = Zoltan_Initialize(argc, argv, &ver);
-	
-	if (rc != ZOLTAN_OK)
-	{
-		printf("sorry...\n");
-		MPI_Finalize();
-		exit(0);
-	}
+   
 
 
     // read in arguments
 
     // defaults
     int nblocks = world.size();     // total number of global blocks
-    int nthreads = 2;               // number of threads diy can use
+    int nthreads = 1;               // number of threads diy can use
     int mblocks = -1;               // number of blocks in memory (-1 = all)
     string prefix = "./DIY.XXXXXX"; // storage of temp files
     int ndims = 3;                  // domain dimensions
@@ -209,8 +223,29 @@ int main(int argc, char **argv){
         return 1;
     }
 
+    diy::FileStorage storage(prefix);
+    diy::Master master(world,
+                       nthreads,
+                       mblocks,
+                       &BBlock::create,
+                       &BBlock::destroy,
+                       &storage,
+                       &BBlock::save,
+                       &BBlock::load);
+    diy::RoundRobinAssigner assigner(world.size(), nblocks);
 
-   
+    std::vector<int> gids;                     // global ids of local blocks
+    assigner.local_gids(world.rank(), gids);   // get the gids of local blocks
+    for (size_t i = 0; i < gids.size(); ++i)   // for the local blocks in this processor
+    {
+        int gid = gids[i];
+
+        diy::Link*   link = new diy::Link;   // link is this block's neighborhood
+        master.add(gid, new BBlock, link);    // add the current local block to the master
+    }
+
+
+    
     
     int C = 4; // blocks per side of domain
     bbounds dom = {domain.max[0], domain.max[1], domain.max[2], domain.min[0], domain.min[1], domain.min[2]};
@@ -221,20 +256,54 @@ int main(int argc, char **argv){
     assert((domain.max[2] - domain.min[2]+1)%(C*C*C) == 0);
 
     // use the partitioner to identify the boundary int value for bottom corner of cell
-    std::map<int, std::vector<float>> data;
-    std::vector<int> bid_to_rank(C*C*C,0);
-    std::vector<int> weights(C*C*C);
+    // std::map<int, std::vector<float>> data;
+    // std::vector<int> bid_to_rank(C*C*C,0);
+    // std::vector<int> weights(C*C*C);
+    // int bside[3];
+    // std::vector<int> partn; // map of gid to current partn
 
-    partition(dom, C, data, world.rank(), world.size(), bid_to_rank);
+    // MESH_DATA mesh_data;
 
-    // read data blocks for current process, set weights to be uniform
-    read_data(data, weights);
+    master.foreach ([&](BBlock *b, const diy::Master::ProxyWithLink &cp) {
+        dprint("in master");
+        b->bid_to_rank.resize(C*C*C);
+        b->weights.resize(C*C*C);
+        partition(world, dom, C, b->data, world.rank(), world.size(), b->bid_to_rank, &b->bside[0], b->partn, b->mesh_data);
+
+        read_data(world, infile.c_str(), b->data, b->weights, C, &b->bside[0]);
+
+        // assign and send
+         assign(world, b->data, b->weights, b->partn, b->mesh_data, b, cp, assigner);
+
+       
+    });
+
+    // receive and update data
+    bool remote = true;
+    master.exchange(remote);
+    master.foreach(&remote_deq);
+
+   
+
+    // partition(world, dom, C, data, world.rank(), world.size(), bid_to_rank, &bside[0], partn, mesh_data);
+
+    // // read data blocks for current process, set weights to be uniform
+    // read_data(world, infile.c_str(), data, weights, C, &bside[0]);
 
     
+    //  master.foreach([&](BBlock* b, const diy::Master::ProxyWithLink& cp)
+    //             { remote_enq(b, cp, assigner); });
+    // bool remote = true;
+    // master.exchange(remote);
+    // master.foreach(&remote_deq);
 
 
+    // // use the assigner to assigne the cells to partitions (uses Zoltan), also move data blocks around accordingly
+    // assign(world, data, weights, partn, mesh_data);
 
-    // use the assigner to assigne the cells to partitions (uses Zoltan), also move data blocks around accordingly
+    // if (world.rank() == 0)
+    //     pvi (partn);
+
 
 
 
