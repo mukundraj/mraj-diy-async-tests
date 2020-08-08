@@ -53,9 +53,9 @@ void seed(BBlock *b, bbounds &dom, int C, float sr, int rank){
                     float pt[3] = {i,j,k};
                     int gid = pos2cgid(pt[0], pt[1], pt[2], dom, C); 
 
-                    if (rank == 0){
-                            dprint(" in rank 0, gid %d, (%f %f %f), dom [%f %f %f]", gid, i, j, k, i/(float)dom.cside[0], j/(float)dom.cside[1], k/(float)dom.cside[2]);
-                      }
+                    // if (rank == 0){
+                    //         dprint(" in rank 0, gid %d, (%f %f %f), dom [%f %f %f]", gid, i, j, k, i/(float)dom.cside[0], j/(float)dom.cside[1], k/(float)dom.cside[2]);
+                    //   }
 
                     if (b->data.find(gid)!=b->data.end()){
                         BEndPt endp;

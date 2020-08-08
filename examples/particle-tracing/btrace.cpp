@@ -294,20 +294,28 @@ int main(int argc, char **argv){
 
     // receive and update data
     bool remote = true;
-    // master.exchange(remote);
-    // master.foreach(&remote_deq);
+    master.exchange(remote);
+    master.foreach(&remote_deq);
 
 
     master.foreach ([&](BBlock *b, const diy::Master::ProxyWithLink &cp) {
+
+        //  if (world.rank()==0){
+        //     for (auto it=b->data.begin(); it!=b->data.end() ; ++it){
+        //         dprint("ASDF %d", it->first);
+        //     }
+        //     dprint("HERE!!!! %ld, %ld", b->data.size(), b->particles.size());
+        // }
+
       
         seed(b, dom, C, seed_rate, world.rank());
 
         std::map<int, std::vector<BEndPt>>::iterator it = b->particles.begin();
         while (it != b->particles.end()){
-            if(cp.gid()==0 ){
+            // if(cp.gid()==0 ){
                 dprint("rank [%d %d], cid %d, particles %ld, seed_rate %f", world.rank(), cp.gid(), it->first, it->second.size(), seed_rate);
             
-            }
+            // }
             it++;
         }
 

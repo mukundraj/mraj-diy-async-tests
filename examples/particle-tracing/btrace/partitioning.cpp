@@ -148,36 +148,41 @@ void assign(diy::mpi::communicator &world, std::map<int, std::vector<float>> &da
     std::map<int, datablock> stage;
 
     // master.foreach([&](BBlock* b, const diy::Master::ProxyWithLink& cp)
-    dprint("rank %d, numExport %d", world.rank(), numExport);
-    // for (int i=0; i<numExport; i++){
+    if (numExport>0){
+        dprint("rank %d, numExport %d, cids [%d %d %d %d %d %d %d %d] toProcs [%d %d %d %d %d %d %d %d]", world.rank(), numExport, exportGlobalGids[0], exportGlobalGids[1], exportGlobalGids[2], exportGlobalGids[3], exportGlobalGids[4], exportGlobalGids[5], exportGlobalGids[6], exportGlobalGids[7], exportProcs[0], exportProcs[1],exportProcs[2],exportProcs[3],exportProcs[4],exportProcs[5],exportProcs[6],exportProcs[7]  );
+    }
+    // std::map<int, std::vector<float>>::iterator it; 
+    for (int i=0; i<numExport; i++){
        
-    //     if (stage.find(exportProcs[i]) == stage.end()) {
-    //         datablock db;
-    //         db.to_proc = exportProcs[i];
-    //         db.from_proc = world.rank();
-    //         db.data.push_back(std::move(data[exportGlobalGids[i]]));
-    //         db.cgid.push_back(exportGlobalGids[i]);
-    //         db.particles.push_back(std::move(b->particles[exportGlobalGids[i]]));
-    //         stage[exportProcs[i]] = db;
-    //         data.erase(exportGlobalGids[i]);
-    //         particles.erase(exportGlobalGids[i]);
-    //         // dprint("particles %ld", db.particles[i].size());
-    //     }else{
-    //        stage[exportProcs[i]].data.push_back(std::move(data[exportGlobalGids[i]])); 
-    //        stage[exportProcs[i]].cgid.push_back(exportGlobalGids[i]);
-    //        stage[exportProcs[i]].particles.push_back(std::move(b->particles[exportGlobalGids[i]]));
-    //        data.erase(exportGlobalGids[i]);
-    //        particles.erase(exportGlobalGids[i]);
+        if (stage.find(exportProcs[i]) == stage.end()) { // if export procid has already added to stage
+            datablock db;
+            db.to_proc = exportProcs[i];
+            db.from_proc = world.rank();
+            db.data.push_back(std::move(data[exportGlobalGids[i]]));
+            db.cgid.push_back(exportGlobalGids[i]);
+            db.particles.push_back(std::move(particles[exportGlobalGids[i]]));
+            stage[exportProcs[i]] = db;
+            data.erase(exportGlobalGids[i]);
+            particles.erase(exportGlobalGids[i]);
+            // dprint("particles %ld", db.particles[i].size());
+        }else{
+           stage[exportProcs[i]].data.push_back(std::move(data[exportGlobalGids[i]])); 
+           stage[exportProcs[i]].cgid.push_back(exportGlobalGids[i]);
+           stage[exportProcs[i]].particles.push_back(std::move(particles[exportGlobalGids[i]]));
+           data.erase(exportGlobalGids[i]);
+            // it = data.find(exportGlobalGids[i]);
+            data.erase(exportGlobalGids[i]);
+            particles.erase(exportGlobalGids[i]);
 
-    //     }
-        
+        }
+    }
 
-        
-    // }
+    
+   
 
-    // for ( auto &pair : stage ) {
-    //     remote_enq(b, cp, assigner, pair.second); 
-    // }
+    for ( auto &pair : stage ) {
+        remote_enq(b, cp, assigner, pair.second); 
+    }
     
 
   /******************************************************************
