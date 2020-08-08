@@ -61,6 +61,7 @@ using namespace std;
 #include "btrace/io.h"
 
 #include "btrace/bblock.hpp"
+#include "btrace/advection.h"
 
 // debugging: catches segfaults and dumps a backtrace
 // copied from Dmitriy's henson/henson-chai.cpp
@@ -158,7 +159,8 @@ void remote_deq(BBlock* b, const diy::Master::ProxyWithLink& cp)
             fmt::print(stderr, "Remote dequeue: gid {} received value {} from gid {}\n", cp.gid(), recvd_data.data.size(), recvd_data.from_proc);
             for (size_t i=0; i<recvd_data.cgid.size(); i++){
                 b->data[recvd_data.cgid[i]] = recvd_data.data[i];
-            }
+                b->particles[recvd_data.cgid[i]] = std::move(recvd_data.particles[i]);
+            }   
         }
 }
 
@@ -243,11 +245,12 @@ int main(int argc, char **argv){
         diy::Link*   link = new diy::Link;   // link is this block's neighborhood
         master.add(gid, new BBlock, link);    // add the current local block to the master
     }
+    // definitions
+    // element: 1x1x1 pixel
+    // cell: smallest unit that can be moved around (formerly block)
+    // block: data consisting of multiple cells in a process
 
-
-    
-    
-    int C = 4; // blocks per side of domain
+    int C = 4; // cells per side of domain
     bbounds dom = {domain.max[0], domain.max[1], domain.max[2], domain.min[0], domain.min[1], domain.min[2]};
     
     
@@ -268,20 +271,47 @@ int main(int argc, char **argv){
         dprint("in master");
         b->bid_to_rank.resize(C*C*C);
         b->weights.resize(C*C*C);
-        partition(world, dom, C, b->data, world.rank(), world.size(), b->bid_to_rank, &b->bside[0], b->partn, b->mesh_data);
+        partition(world, dom, C, b->data,  world.rank(), world.size(), b->bid_to_rank, &b->bside[0], b->partn, b->mesh_data);
 
         read_data(world, infile.c_str(), b->data, b->weights, C, &b->bside[0]);
 
         // assign and send
-         assign(world, b->data, b->weights, b->partn, b->mesh_data, b, cp, assigner);
+        assign(world, b->data, b->particles, b->weights, b->partn, b->mesh_data, b, cp, assigner);
 
-       
+
+        // int gid = pos2cgid(130,10,10, dom, C);
+        // dprint("gid %d", gid);
+        
+        // bbounds bnd;
+        // gid2bounds(gid, &dom.cside[0], C, bnd);
+        // dprint("bnd [%d %d] [%d %d] [%d %d], rank %d", bnd.min[0], bnd.max[0], bnd.min[1], bnd.max[1], bnd.min[2], bnd.max[2], world.rank());
+
+        
+
+        // dprint("seeded %ld, seed_rate %f, rank %d", b->particles.size(), seed_rate, world.rank());
+
     });
 
     // receive and update data
     bool remote = true;
-    master.exchange(remote);
-    master.foreach(&remote_deq);
+    // master.exchange(remote);
+    // master.foreach(&remote_deq);
+
+
+    master.foreach ([&](BBlock *b, const diy::Master::ProxyWithLink &cp) {
+      
+        seed(b, dom, C, seed_rate, world.rank());
+
+        std::map<int, std::vector<BEndPt>>::iterator it = b->particles.begin();
+        while (it != b->particles.end()){
+            if(cp.gid()==0 ){
+                dprint("rank [%d %d], cid %d, particles %ld, seed_rate %f", world.rank(), cp.gid(), it->first, it->second.size(), seed_rate);
+            
+            }
+            it++;
+        }
+
+    });
 
    
 

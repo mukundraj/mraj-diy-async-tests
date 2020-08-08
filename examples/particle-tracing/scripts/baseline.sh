@@ -16,7 +16,7 @@ infile="/home/mraj/datasets/nek/nek5000.nc"
 max_steps=1024
 
 # seed rate (seed particles every this many grid points in each dimension)
-sr=8
+sr=64
 #sr=3
 # sr=128
 

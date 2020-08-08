@@ -46,7 +46,7 @@ static void init_zoltan_input(MESH_DATA &myMesh, std::vector<int> &partn, std::m
 static void move_data(diy::mpi::communicator &world, int numImport, unsigned int*& importGlobalGids, int*& importProcs, int numExport, unsigned int*& exportGlobalGids, int*& exportProcs, std::map<int, std::vector<float>> & data);
 
 
-void assign(diy::mpi::communicator &world, std::map<int, std::vector<float>> &data, std::vector<int> &weights, std::vector<int> &partn, MESH_DATA &myMesh, BBlock* b, const diy::Master::ProxyWithLink &cp, const diy::RoundRobinAssigner &assigner){
+void assign(diy::mpi::communicator &world, std::map<int, std::vector<float>> &data, std::map<int, std::vector<BEndPt>> particles, std::vector<int> &weights, std::vector<int> &partn, MESH_DATA &myMesh, BBlock* b, const diy::Master::ProxyWithLink &cp, const diy::RoundRobinAssigner &assigner){
 
 
     int argc; char **argv;
@@ -119,21 +119,21 @@ void assign(diy::mpi::communicator &world, std::map<int, std::vector<float>> &da
 
     // dprint("rank %d numExp %d, numImport %d", world.rank(), numExport, numImport);
 
-  if (world.rank() == 6)
-  {
-      for (int i = 0; i < numExport; i++)
-      {
-          dprint("exp torank %d gid %d", exportProcs[i], exportGlobalGids[i]);
-      }
-  }
+//   if (world.rank() == 6)
+//   {
+//       for (int i = 0; i < numExport; i++)
+//       {
+//           dprint("exp torank %d gid %d", exportProcs[i], exportGlobalGids[i]);
+//       }
+//   }
 
-    if (world.rank() == 0)
-  {
-      for (int i = 0; i < numExport; i++)
-      {
-          dprint("exp fromrank %d gid %d", importProcs[i], importGlobalGids[i]);
-      }
-  }
+//     if (world.rank() == 0)
+//   {
+//       for (int i = 0; i < numExport; i++)
+//       {
+//           dprint("exp fromrank %d gid %d", importProcs[i], importGlobalGids[i]);
+//       }
+//   }
 
     if (rc != ZOLTAN_OK)
 	{
@@ -149,34 +149,35 @@ void assign(diy::mpi::communicator &world, std::map<int, std::vector<float>> &da
 
     // master.foreach([&](BBlock* b, const diy::Master::ProxyWithLink& cp)
     dprint("rank %d, numExport %d", world.rank(), numExport);
-    for (int i=0; i<numExport; i++){
+    // for (int i=0; i<numExport; i++){
        
-        // db.to_proc =  exportProcs[i];
-        // db.cgid = exportGlobalGids[i];
-        // db.from_proc = world.rank();
-        // db.data = );
+    //     if (stage.find(exportProcs[i]) == stage.end()) {
+    //         datablock db;
+    //         db.to_proc = exportProcs[i];
+    //         db.from_proc = world.rank();
+    //         db.data.push_back(std::move(data[exportGlobalGids[i]]));
+    //         db.cgid.push_back(exportGlobalGids[i]);
+    //         db.particles.push_back(std::move(b->particles[exportGlobalGids[i]]));
+    //         stage[exportProcs[i]] = db;
+    //         data.erase(exportGlobalGids[i]);
+    //         particles.erase(exportGlobalGids[i]);
+    //         // dprint("particles %ld", db.particles[i].size());
+    //     }else{
+    //        stage[exportProcs[i]].data.push_back(std::move(data[exportGlobalGids[i]])); 
+    //        stage[exportProcs[i]].cgid.push_back(exportGlobalGids[i]);
+    //        stage[exportProcs[i]].particles.push_back(std::move(b->particles[exportGlobalGids[i]]));
+    //        data.erase(exportGlobalGids[i]);
+    //        particles.erase(exportGlobalGids[i]);
 
-        if (stage.find(exportProcs[i]) == stage.end()) {
-            datablock db;
-            db.to_proc = exportProcs[i];
-            db.from_proc = world.rank();
-            db.data.push_back(std::move(data[exportGlobalGids[i]]));
-            db.cgid.push_back(exportGlobalGids[i]);
-            stage[exportProcs[i]] = db;
-            data.erase(exportGlobalGids[i]);
-        }else{
-           stage[exportProcs[i]].data.push_back(std::move(data[exportGlobalGids[i]])); 
-           stage[exportProcs[i]].cgid.push_back(exportGlobalGids[i]);
-           data.erase(exportGlobalGids[i]);
-
-        }
+    //     }
+        
 
         
-    }
+    // }
 
-    for ( auto &pair : stage ) {
-        remote_enq(b, cp, assigner, pair.second); 
-    }
+    // for ( auto &pair : stage ) {
+    //     remote_enq(b, cp, assigner, pair.second); 
+    // }
     
 
   /******************************************************************
@@ -320,8 +321,11 @@ void partition(diy::mpi::communicator& world, bbounds &dom, int C, std::map<int,
     int coords[3] = {c2, c1, c0};
 
     int ccoords[3] =  {coords[0]*side[0], coords[1]*side[1], coords[2]*side[2]};// side of block
+    dom.cside[0] = (dom.max[0] - dom.min[0]+1)/C; 
+    dom.cside[1] = (dom.max[1] - dom.min[1]+1)/C; 
+    dom.cside[2] = (dom.max[2] - dom.min[2]+1)/C; 
 
-    // dprint("rank %d, coords %d %d %d", rank, coords[0], coords[1], coords[2]);
+    dprint("rank %d, cside %d %d %d", rank, dom.cside[0], dom.cside[1], dom.cside[2]);
     // dprint("rank %d, ccoords %d %d %d | rpd %d", rank, ccoords[0],  ccoords[1], ccoords[2], rpd);
 
     
@@ -334,7 +338,7 @@ void partition(diy::mpi::communicator& world, bbounds &dom, int C, std::map<int,
 
     // populate the block ids into the map
 
-    // int bpd = C; // blocks per dimension
+    // int bpd = C; // cells per dimension
     // int T = C*C*C; // 
 
     // c2 = T / (bpd*bpd); // slowest varying

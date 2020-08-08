@@ -1,7 +1,9 @@
 #ifndef BBLOCK_HPP
 #define BBLOCK_HPP
 
+#include "bmisc.h"
 #include <diy/master.hpp>
+#include "zoltan.h"
 
 struct MESH_DATA{
   int numGlobalPoints;
@@ -33,6 +35,9 @@ struct BBlock
   int bside[3];
   std::vector<int> partn; // map of gid to current partn
   MESH_DATA mesh_data;
+
+  // for advection
+  std::map<int, std::vector<BEndPt>> particles;
 
 };
 
