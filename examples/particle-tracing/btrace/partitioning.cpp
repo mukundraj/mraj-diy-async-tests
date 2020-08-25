@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include "message.h"
+#include "advection.h"
+#include <queue>
 
 
 // enqueue remote data
@@ -27,6 +29,83 @@ void remote_enq(
     cp.enqueue(dest_block, db);
 }
 
+static void remote_enq_blk_req(
+    BBlock*,
+    const diy::Master::ProxyWithLink&   cp,
+    const diy::Assigner&                assigner, 
+    data_req &msg
+){
+    int my_gid              = cp.gid();
+    int dest_gid            = msg.to_proc;
+    int dest_proc           = assigner.rank(dest_gid);
+    diy::BlockID dest_block = {dest_gid, dest_proc};
+
+    // db.gid = my_gid;
+    cp.enqueue(dest_block, msg);
+}
+
+static void remote_enq_fulfill(
+        BBlock*,
+        const diy::Master::ProxyWithLink&   cp,
+        const diy::Assigner&                assigner, 
+        datablock &db
+
+){
+    int my_gid              = cp.gid();
+    int dest_gid            = db.to_proc;
+    int dest_proc           = assigner.rank(dest_gid);
+    diy::BlockID dest_block = {dest_gid, dest_proc};
+
+    // db.gid = my_gid;
+    cp.enqueue(dest_block, db);
+
+}
+
+// fullfilling ghost cell request on receiver side
+static void remote_deq_fulfill(
+    BBlock* b, const diy::Master::ProxyWithLink& cp
+){ 
+
+
+   std::vector<int> incoming_gids;
+    cp.incoming(incoming_gids);
+    for (size_t i = 0; i < incoming_gids.size(); i++)
+        if (cp.incoming(incoming_gids[i]).size())
+        {   
+            datablock recvd_data;
+            cp.dequeue(incoming_gids[i], recvd_data);
+            for(int i=0; i< recvd_data.cgid.size(); i++){
+                int cid = recvd_data.cgid[i]; 
+                b->data_ghost[cid] = recvd_data.data[i];
+                b->bounds_ghost[cid] = recvd_data.bounds[i];
+            }
+        } 
+
+}
+
+// remote dequeuing block request
+static void remote_deq_blk_req(BBlock* b, const diy::Master::ProxyWithLink& cp){
+    
+    b->data_reqsts.clear();
+
+    std::vector<int> incoming_gids;
+    cp.incoming(incoming_gids);
+    for (size_t i = 0; i < incoming_gids.size(); i++)
+        if (cp.incoming(incoming_gids[i]).size())
+        {   
+            // int recvd_data;
+            data_req recvd_data;
+            cp.dequeue(incoming_gids[i], recvd_data);
+            // fmt::print(stderr, "Remote dequeued: gid {} received value {} from {}\n", cp.gid(), recvd_data.cids.size(), recvd_data.from_proc);
+            b->data_reqsts.push_back(recvd_data);
+            // for (size_t i=0; i<recvd_data.cgid.size(); i++){
+            //     b->data[recvd_data.cgid[i]] = recvd_data.data[i];
+            //     b->particles[recvd_data.cgid[i]] = std::move(recvd_data.particles[i]);
+            //     b->bounds[recvd_data.cgid[i]] = std::move(recvd_data.bounds[i]);
+            // }   
+        }
+}
+
 
 
 /* Application defined query functions */
@@ -46,7 +125,7 @@ static void init_zoltan_input(MESH_DATA &myMesh, std::vector<int> &partn, std::m
 static void move_data(diy::mpi::communicator &world, int numImport, unsigned int*& importGlobalGids, int*& importProcs, int numExport, unsigned int*& exportGlobalGids, int*& exportProcs, std::map<int, std::vector<float>> & data);
 
 
-void assign(diy::mpi::communicator &world, std::map<int, std::vector<float>> &data, std::map<int, std::vector<BEndPt>> particles, std::vector<int> &weights, std::vector<int> &partn, MESH_DATA &myMesh, BBlock* b, const diy::Master::ProxyWithLink &cp, const diy::RoundRobinAssigner &assigner){
+void assign(diy::mpi::communicator &world, std::map<int, std::vector<float>> &data, std::map<int, std::vector<BEndPt>> particles, std::vector<int> &weights, std::vector<int> &partn, MESH_DATA &myMesh, BBlock* b, const diy::Master::ProxyWithLink &cp, const diy::RoundRobinAssigner &assigner, std::map<int,bbounds> &bounds){
 
 
     int argc; char **argv;
@@ -161,24 +240,33 @@ void assign(diy::mpi::communicator &world, std::map<int, std::vector<float>> &da
             db.data.push_back(std::move(data[exportGlobalGids[i]]));
             db.cgid.push_back(exportGlobalGids[i]);
             db.particles.push_back(std::move(particles[exportGlobalGids[i]]));
+            db.bounds.push_back(std::move(bounds[exportGlobalGids[i]]));
+
             stage[exportProcs[i]] = db;
             data.erase(exportGlobalGids[i]);
             particles.erase(exportGlobalGids[i]);
+            bounds.erase(exportGlobalGids[i]);
             // dprint("particles %ld", db.particles[i].size());
         }else{
+             if (exportGlobalGids[i]==1){
+                dprint("checkval %d bnd.min[0] %d", exportGlobalGids[i], bounds[exportGlobalGids[i]].min[0]);
+            }
            stage[exportProcs[i]].data.push_back(std::move(data[exportGlobalGids[i]])); 
            stage[exportProcs[i]].cgid.push_back(exportGlobalGids[i]);
            stage[exportProcs[i]].particles.push_back(std::move(particles[exportGlobalGids[i]]));
+           stage[exportProcs[i]].bounds.push_back(std::move(bounds[exportGlobalGids[i]]));
+
            data.erase(exportGlobalGids[i]);
             // it = data.find(exportGlobalGids[i]);
             data.erase(exportGlobalGids[i]);
             particles.erase(exportGlobalGids[i]);
+            bounds.erase(exportGlobalGids[i]);
 
         }
     }
 
     
-   
+    
 
     for ( auto &pair : stage ) {
         remote_enq(b, cp, assigner, pair.second); 
@@ -202,11 +290,11 @@ void assign(diy::mpi::communicator &world, std::map<int, std::vector<float>> &da
      ** all done ***********
     **********************/
 
-    if (myMesh.numMyPoints > 0){
-        free(myMesh.myGlobalIDs);
-        free(myMesh.x);
-        free(myMesh.y);
-    }
+    // if (myMesh.numMyPoints > 0){
+    //     free(myMesh.myGlobalIDs);
+    //     free(myMesh.x);
+    //     free(myMesh.y);
+    // }
 
 
 }
@@ -306,7 +394,7 @@ static void move_data(diy::mpi::communicator &world, int numImport, unsigned int
 }
 
 
-void partition(diy::mpi::communicator& world, bbounds &dom, int C, std::map<int, std::vector<float>> & data, int rank, int worldsize, std::vector<int> &bid_to_rank, int *bside, std::vector<int> &part, MESH_DATA &mesh_data){
+void partition(diy::mpi::communicator& world, bbounds &dom, int C, std::map<int, std::vector<float>> & data, int rank, int worldsize, std::vector<int> &cid_to_rank, int *cside, std::vector<int> &part, MESH_DATA &mesh_data, BBlock* b){
     
    
     // int S =  C * cellsperblockside // cells per side;
@@ -336,9 +424,9 @@ void partition(diy::mpi::communicator& world, bbounds &dom, int C, std::map<int,
     
 
 
-    bside[0]= (dom.max[0] - dom.min[0]+1)/C;
-    bside[1] =  (dom.max[0] - dom.min[0]+1)/C;
-    bside[2] = (dom.max[0] - dom.min[0]+1)/C ; // cells per side of a block
+    cside[0]= (dom.max[0] - dom.min[0]+1)/C;
+    cside[1] =  (dom.max[0] - dom.min[0]+1)/C;
+    cside[2] = (dom.max[0] - dom.min[0]+1)/C ; // cells per side of a block
     // dprint("bside %d %d %d", bside[0], bside[1], bside[2]);
 
     // populate the block ids into the map
@@ -360,7 +448,7 @@ void partition(diy::mpi::communicator& world, bbounds &dom, int C, std::map<int,
 
 
 
-    // add the cell ids to the map and set current rank in bid_to_rank
+    // add the cell ids to the map and set current rank in cid_to_rank
     
     for (int i=coords[0]*bpr; i<coords[0]*bpr+bpr; i++){
         for (int j=coords[1]*bpr; j< coords[1]*bpr+bpr; j++){
@@ -368,19 +456,30 @@ void partition(diy::mpi::communicator& world, bbounds &dom, int C, std::map<int,
                 int bid = i*C*C + j*C + k;
                 // dprint ("rank %d, bid %d", rank, bid);
 
-                std::vector<float> temp(3*bside[0]*bside[1]*bside[2]);
+                std::vector<float> temp(3*cside[0]*cside[1]*cside[2]);
                 std::pair<int,std::vector<float>> tpair (bid,temp);
                 data.insert(tpair);
-                bid_to_rank[bid] = rank;
+               
+                cid_to_rank[bid] = rank;
+
+                bbounds bnd;
+                // bnd.cside[0] = cside[0];
+                // bnd.cside[1] = cside[1];
+                // bnd.cside[2] = cside[2];
+
+                gid2bounds(bid, &cside[0], C, dom, bnd);
+                dprint("cid %d, rank %d, bnd %d %d %d |cside %d %d %d |%d", bid, world.rank(), bnd.max[0], bnd.max[1], bnd.max[2], bnd.cside[0], bnd.cside[1], bnd.cside[2], dom.max[2]);
+                std::pair<int,bbounds> tpair2(bid,bnd);
+                b->bounds.insert(tpair2);
 
             }
         }
     }
-    part.resize(bid_to_rank.size());
-    MPI_Allreduce(&bid_to_rank[0], &part[0], bid_to_rank.size(), MPI_INT, MPI_SUM, world);
+    part.resize(cid_to_rank.size());
+    MPI_Allreduce(&cid_to_rank[0], &part[0], cid_to_rank.size(), MPI_INT, MPI_SUM, world);
 
 
-    dprint("data size %d, %ld", data.size(), bid_to_rank.size());
+    dprint("data size %d, %ld", data.size(), cid_to_rank.size());
 
 
     // init the Zoltan mesh
@@ -484,6 +583,222 @@ void init_zoltan_input(MESH_DATA &myMesh, std::vector<int> &partn, std::map<int,
 
     // copy 
 
+
+
+
+}
+
+
+void update_cid_to_rank_vector(diy::mpi::communicator &world, std::map<int, std::vector<float>> &data, std::vector<int> &cid_to_rank){
+
+    // reset cid_to_rank vector
+
+    std::fill(cid_to_rank.begin(), cid_to_rank.end(), 0);
+
+    std::vector<int> tmp(cid_to_rank.size());
+
+    // populate current cell positions in the cid_to_rank vector
+    std::map<int, std::vector<float>>::iterator it = data.begin();
+    while (it != data.end()){
+        tmp[it->first] = world.rank();
+        it++;
+    }
+
+   // all reduce the cid to rank vector
+   MPI_Allreduce(&tmp[0], &cid_to_rank[0], cid_to_rank.size(), MPI_INT, MPI_SUM, world);
+
+}
+
+void get_nbrs_of_cell(int cid, std::vector<int>& nbrs, bbounds &bnd, bbounds &dom, int C, int rank){
+
+    // to do 
+    // pass in global bounds, use it's cside and also check if it is inside
+    
+    int i,j,k;
+
+    int ctr = 0;
+    int x,y,z;
+    // if (cid==1){
+    for (int i=-1; i<2; i++){
+        for (int j=-1; j<2; j++){
+            for (int k=-1; k<2; k++){
+                
+
+                if (ctr!=13){
+                    x = bnd.min[0] + i*dom.cside[0];
+                    y = bnd.min[1] + j*dom.cside[1];
+                    z = bnd.min[2] + k*dom.cside[2];
+                    
+                    if (x >= dom.min[0] && x < dom.max[0] & 
+                        y >= dom.min[1] && y < dom.max[1] &
+                        z >= dom.min[2] && z < dom.max[2] ){
+                            int ccid = pos2cgid((float)x, (float)y, (float)z, bnd, C);
+                            // dprint("ctr %d (%d %d %d), ccid %d , (%d %d %d), %d %d, rank %d", ctr, i, j, k, ccid, x,y,z, bnd.min[2], dom.cside[2], rank);
+                            nbrs.push_back(ccid);
+                        }
+                }
+                ctr++;
+
+            }
+        }
+    }
+
+
+
+        
+    //  dprint("getting nbr of %d, size %ld", cid, nbrs.size());
+    // }
+
+   
+    
+}
+
+
+void id_ghost_cells(std::map<int, std::vector<float>> &data, std::map<int, std::vector<float>> &data_ghost, std::map<int, bbounds> &bounds, bbounds &dom, int C, int rank){
+
+    std::queue<int> queue;
+
+    // push cells in block into queue 
+    std::map<int, std::vector<float>>::iterator it = data.begin();
+    while (it != data.end()){
+        
+        queue.push(it->first);
+        it++;
+    }
+
+
+    std::vector<int> ghost_cids;
+
+    // while queue not empty
+    while(queue.size()>0){
+
+        int ccid = queue.front();
+        queue.pop();
+
+        // get nbrs of cells
+        std::vector<int> nbrs;
+        
+        // if (ccid==1){
+        //     dprint("ccid %d rank %d", ccid, rank);
+        //     dprint("ccid %d rank %d, datasize %ld %d", ccid, rank, data[ccid].size(), bounds[ccid].min[0]);
+        //     print_cellids_in_block(data);
+        // }
+        get_nbrs_of_cell(ccid, nbrs, bounds[ccid], dom, C, rank);
+
+        // push nbrs in queue and ghost_cids if not already in block
+        for (auto &nbr_cid: nbrs){
+            if (data.find(nbr_cid)==data.end()){
+                ghost_cids.push_back(nbr_cid);
+            }
+        }
+        
+
+    }
+
+    dprint("ghost cids %ld", ghost_cids.size());
+    // push the ghost ids to b->data_ghost
+    for (auto &cid: ghost_cids){
+        std::vector<float> tmp;
+        data_ghost.insert(std::make_pair(cid, tmp));
+        
+    }
+}
+
+
+void get_ghost_cells(diy::Master &master, const diy::RoundRobinAssigner &assigner, int N, bbounds &dom, int C, int rank){
+
+
+    // id ghost cells
+    master.foreach ([&](BBlock *b, const diy::Master::ProxyWithLink &cp) {
+        id_ghost_cells(b->data, b->data_ghost, b->bounds, dom, C, rank);
+        dprint("data ghost %d", b->data_ghost.size());
+         // enqueue request for ghost cells using b->cid_to_rank using b->gid_to_rank
+
+        std::map<int, data_req> stage;
+
+        std::map<int, std::vector<float>>::iterator it = b->data_ghost.begin();
+
+        while (it != b->data_ghost.end()){
+             int dest = b->cid_to_rank[it->first];
+             int ccid = it->first;
+
+             if (stage.find(dest) == stage.end())
+             { // if export procid has already added to stage
+                 data_req db;
+
+                 db.to_proc = dest;
+                 db.from_proc = rank;
+                //  db.data.push_back(b->data[ccid]);
+                 db.cids.push_back(ccid);
+                //  db.bounds.push_back(b->bounds[ccid]);
+                 stage[dest] = db;
+             }
+            else
+             {
+                //  stage[dest].data.push_back(b->data[ccid]);
+                 stage[dest].cids.push_back(ccid);
+                //  stage[dest].bounds.push_back(b->bounds[ccid]);
+             }
+
+            
+            // int dest = b->cid_to_rank[it->first];
+            // data_req msg;
+            // msg.to_proc = dest;
+            // msg.cid = it->first;
+            // msg.from_proc = rank;
+            
+            // remote_enq_blk_req(b, cp, assigner, msg);
+            
+            // fprintf(stderr, "%d ", it->first );
+            it++;
+        }
+
+        for ( auto &pair : stage ) {
+            remote_enq_blk_req(b, cp, assigner, pair.second); 
+        }
+    
+    });
+
+  
+
+   
+    // do rexchange
+    bool remote = true;
+    master.exchange(remote);
+    master.foreach(&remote_deq_blk_req);
+
+    
+    // enqueue back ghost cells data to fullfill requests
+      master.foreach ([&](BBlock *b, const diy::Master::ProxyWithLink &cp) {
+
+        std::map<int, datablock> stage;
+          
+        //   remote_enq_fulfill
+
+        for (data_req &req: b->data_reqsts){
+
+            datablock db;
+            db.to_proc = req.from_proc;
+            db.from_proc = rank;
+            // iterage over each proc's cids  
+            for (int &cid : req.cids){
+                db.data.push_back(b->data[cid]);
+                db.cgid.push_back(cid);
+                db.bounds.push_back(b->bounds[cid]);
+            }
+            remote_enq(b, cp, assigner, db);  
+        }
+
+        // for ( auto &pair : stage ) {
+        //     remote_enq(b, cp, assigner, pair.second); 
+        // }
+
+
+      });
+
+    // do rexchange
+    master.exchange(remote);
+    master.foreach(&remote_deq_fulfill);
 
 
 

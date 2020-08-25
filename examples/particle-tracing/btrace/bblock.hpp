@@ -4,6 +4,19 @@
 #include "bmisc.h"
 #include <diy/master.hpp>
 #include "zoltan.h"
+#include "message.h"
+#include <diy/point.hpp>
+
+struct BPt
+{
+    diy::Point<float, 3>    coords;
+};
+
+struct BSegment{
+    int pid;        // 
+    std::vector<BPt> pts; // points along trace
+    int gid;        
+};
 
 struct MESH_DATA{
   int numGlobalPoints;
@@ -28,16 +41,23 @@ struct BBlock
   // store the data here
 
   std::map<int, std::vector<float>> data;
+  std::map<int, std::vector<float>> data_ghost;
+  std::vector<data_req> data_reqsts;
 //   std::vector<int> bid_to_rank(C *C *C, 0);
-  std::vector<int> bid_to_rank;
+  std::vector<int> cid_to_rank;
 //   std::vector<int> weights(C *C *C);
   std::vector<int> weights;
-  int bside[3];
+  int cside[3]; // length of each cell side
   std::vector<int> partn; // map of gid to current partn
   MESH_DATA mesh_data;
 
   // for advection
   std::map<int, std::vector<BEndPt>> particles;
+  std::map<int, std::vector<BEndPt>> unfinished_particles;
+  std::map<int, bbounds> bounds;
+  std::map<int, bbounds> bounds_ghost;
+
+  std::vector<BSegment> segments;
 
 };
 

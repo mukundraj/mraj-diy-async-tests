@@ -18,6 +18,7 @@
 #include <cstdlib>
 #include <cassert>
 #include <string.h>
+#include "misc.h"
 
 bool advect_brown(
         const int *st,      // min. corner of block
@@ -52,12 +53,14 @@ bool advect_rk1(
         float *X,           // input point
         float h,            // step size
         float *Y = NULL)    // output point if not NULL, otherwise in X
-{
+{   
     if (!inside(3, st, sz, X)) return false;
 
     float v[3];
     if (!lerp3D(X, st, sz, 3, vec, v))
         return false;
+
+    
 
     if (Y)
     {
@@ -84,11 +87,18 @@ bool cadvect_rk1(
         float h,            // step size
         float *Y = NULL)    // output point if not NULL, otherwise in X
 {
+    X[0] = 100.3;
+    X[1] = 100.4;
+    X[2] = 100.5;
+
     if (!cinside(3, st, sz, X)) return false;
 
     float v[3];
     if (!clerp3D(X, st, sz, 3, vec, v))
         return false;
+    
+    dprint("vel %f %f %f", v[0], v[1], v[2]);    
+    exit(0);
 
     if (Y)
     {

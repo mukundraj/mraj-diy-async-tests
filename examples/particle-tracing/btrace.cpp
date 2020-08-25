@@ -160,9 +160,135 @@ void remote_deq(BBlock* b, const diy::Master::ProxyWithLink& cp)
             for (size_t i=0; i<recvd_data.cgid.size(); i++){
                 b->data[recvd_data.cgid[i]] = recvd_data.data[i];
                 b->particles[recvd_data.cgid[i]] = std::move(recvd_data.particles[i]);
+                b->bounds[recvd_data.cgid[i]] = std::move(recvd_data.bounds[i]);
             }   
         }
 }
+
+// merge traces at the root block
+void merge_traces(void *b_, const diy::ReduceProxy &rp, const diy::RegularMergePartners &)
+{
+    BBlock *b = static_cast<BBlock *>(b_);
+
+    // dequeue and merge
+    for (unsigned i = 0; i < rp.in_link().size(); ++i)
+    {
+        int nbr_gid = rp.in_link().target(i).gid;
+        if (nbr_gid == rp.gid()) // skip self
+            continue;
+
+        vector<BSegment> in_traces;
+        rp.dequeue(nbr_gid, in_traces);
+
+        // append in_traces to segments, leaving trajectories segmented and disorganized
+        // eventually could sort into continuous long trajectories, but not necessary at this time
+        b->segments.insert(b->segments.end(), in_traces.begin(), in_traces.end());
+    }
+
+    // enqueue
+    if (rp.out_link().size())
+    {
+        int nbr_gid = rp.out_link().target(0).gid; // for a merge, the out_link size is 1; ie, there is only one target
+        if (nbr_gid != rp.gid())                   // skip self
+            rp.enqueue(rp.out_link().target(0), b->segments);
+    }
+}
+
+void write_segments(std::string filename, std::vector<Segment> &segments)
+    {
+        ofstream f;
+        f.open(filename);
+
+        // debug
+        fmt::print("writing {} segments\n", segments.size());
+
+        for (size_t i = 0; i < segments.size(); i++)
+        {
+            for (size_t j = 0; j < segments[i].pts.size(); j++)
+            {
+                // debug
+//                 fprintf(f, "%ld %f %f %f, ", segments[i].pts.size(), segments[i].pts[0].coords[0], segments[i].pts[0].coords[1], segments[i].pts[0].coords[2]);
+                f << std::setprecision(8) << segments[i].pts[j].coords[0] << " " << segments[i].pts[j].coords[1] << " " << segments[i].pts[j].coords[2] << " ";
+            }
+            f << endl;
+        }
+        f.close();
+    }
+
+void write_traces(
+    diy::Master &master,
+    diy::Assigner &assigner,
+    Decomposer &decomposer, 
+    diy::mpi::communicator &world)
+{
+    dprint("merging traces");
+    // merge-reduce traces to one block
+    // int k = 2; // the radix of the k-ary reduction tree
+    // diy::RegularMergePartners partners(decomposer, k);
+    // diy::reduce(master, assigner, partners, &merge_traces);
+    std::vector<float> segs;
+  
+    
+    std::vector<std::vector<float>> segs2;
+   
+
+
+    std::vector<int> sizes;
+    std::vector<std::vector<int>> all_sizes;
+
+
+    master.foreach ([&](BBlock *b, const diy::Master::ProxyWithLink &cp) {
+        for (size_t i=0; i<b->segments.size(); i++){
+            for (size_t j=0; j<b->segments[i].pts.size(); j++){
+                segs.push_back(b->segments[i].pts[j].coords[0]);
+                segs.push_back(b->segments[i].pts[j].coords[1]);
+                segs.push_back(b->segments[i].pts[j].coords[2]);
+            }
+            sizes.push_back(b->segments[i].pts.size());
+        }
+
+    });
+
+    diy::mpi::gather(world, segs, segs2, 0);
+    diy::mpi::gather(world, sizes, all_sizes, 0);
+
+   
+
+
+
+    if (master.communicator().rank() == 0)
+    {
+
+        
+        std::vector<Segment> all_segs;
+        
+        for(size_t i=0; i<all_sizes.size(); i++){
+            for (size_t j=0; j<all_sizes[i].size(); j++){
+                Segment seg;
+                size_t idx=0;
+                for(int k=0; k<all_sizes[i][j]; k++){
+                    Pt p;
+                    p.coords[0] = segs2[i][idx*3];
+                    p.coords[1] = segs2[i][idx*3+1];
+                    p.coords[2] = segs2[i][idx*3+2];
+                    seg.pts.push_back(p);
+                    idx++;
+                }
+
+            }
+            dprint("sizes %ld ", all_sizes[i].size());
+        }
+
+        fprintf(stderr, "Check is turned on: merging traces to one block and writing them to disk\n");
+        std::string filename;
+       
+        filename = "baseline.txt";
+        // ((Block *)master.block(0))->write_segments(filename);
+        write_segments(filename, all_segs);
+    }
+}
+
+
 
 
 int main(int argc, char **argv){
@@ -236,6 +362,24 @@ int main(int argc, char **argv){
                        &BBlock::load);
     diy::RoundRobinAssigner assigner(world.size(), nblocks);
 
+    // decompose domain
+    Decomposer::BoolVector share_face;
+    Decomposer::BoolVector wrap; // defaults to false
+    Decomposer::CoordinateVector ghosts;
+    ghosts.push_back(1);
+    ghosts.push_back(1);
+    ghosts.push_back(1);
+    share_face.push_back(true);
+    share_face.push_back(true);
+    share_face.push_back(true);
+
+    Decomposer decomposer(ndims,
+                          domain,
+                          assigner.nblocks(),
+                          share_face,
+                          wrap,
+                          ghosts);
+
     std::vector<int> gids;                     // global ids of local blocks
     assigner.local_gids(world.rank(), gids);   // get the gids of local blocks
     for (size_t i = 0; i < gids.size(); ++i)   // for the local blocks in this processor
@@ -251,7 +395,15 @@ int main(int argc, char **argv){
     // block: data consisting of multiple cells in a process
 
     int C = 4; // cells per side of domain
-    bbounds dom = {domain.max[0], domain.max[1], domain.max[2], domain.min[0], domain.min[1], domain.min[2]};
+    bbounds dom;
+    dom.max[0] = domain.max[0];
+    dom.max[1] = domain.max[1];
+    dom.max[2] = domain.max[2];
+    dom.min[0] = domain.min[0];
+    dom.min[1] = domain.min[1];
+    dom.min[2] = domain.min[2];
+
+    int N = 1;// depth of ghost region
     
     
     assert((domain.max[0] - domain.min[0]+1)%(C*C*C) == 0);
@@ -269,14 +421,14 @@ int main(int argc, char **argv){
 
     master.foreach ([&](BBlock *b, const diy::Master::ProxyWithLink &cp) {
         dprint("in master");
-        b->bid_to_rank.resize(C*C*C);
+        b->cid_to_rank.resize(C*C*C);
         b->weights.resize(C*C*C);
-        partition(world, dom, C, b->data,  world.rank(), world.size(), b->bid_to_rank, &b->bside[0], b->partn, b->mesh_data);
+        partition(world, dom, C, b->data,  world.rank(), world.size(), b->cid_to_rank, &b->cside[0], b->partn, b->mesh_data, b);
 
-        read_data(world, infile.c_str(), b->data, b->weights, C, &b->bside[0]);
+        read_data(world, infile.c_str(), b->data, b->weights, C, &b->cside[0], b, dom);
 
         // assign and send
-        assign(world, b->data, b->particles, b->weights, b->partn, b->mesh_data, b, cp, assigner);
+        assign(world, b->data, b->particles, b->weights, b->partn, b->mesh_data, b, cp, assigner, b->bounds );
 
 
         // int gid = pos2cgid(130,10,10, dom, C);
@@ -297,6 +449,12 @@ int main(int argc, char **argv){
     master.exchange(remote);
     master.foreach(&remote_deq);
 
+   master.foreach ([&](BBlock *b, const diy::Master::ProxyWithLink &cp) { 
+
+        update_cid_to_rank_vector(world, b->data, b->cid_to_rank);
+
+   });
+
 
     master.foreach ([&](BBlock *b, const diy::Master::ProxyWithLink &cp) {
 
@@ -313,40 +471,141 @@ int main(int argc, char **argv){
         std::map<int, std::vector<BEndPt>>::iterator it = b->particles.begin();
         while (it != b->particles.end()){
             // if(cp.gid()==0 ){
-                dprint("rank [%d %d], cid %d, particles %ld, seed_rate %f", world.rank(), cp.gid(), it->first, it->second.size(), seed_rate);
+                // dprint("rank [%d %d], cid %d, particles %ld, seed_rate %f", world.rank(), cp.gid(), it->first, it->second.size(), seed_rate);
             
             // }
             it++;
         }
 
+        // interpolate
+        float pt[3] = {100.3,100.4,100.5};
+
+        // dprint("inblock %d, rank %d", in_block(&pt[0], b->data, dom, C), world.rank());
+        int cblock = in_block(&pt[0], b->data, b->data_ghost, dom, C);
+        if (cblock>-1){
+
+            float v[3];
+            lerp(&pt[0], b->bounds[cblock], b->data[cblock], &v[0]);
+
+            // dprint("interpolated %f %f %f | cblock %d", v[0], v[1], v[2], cblock);
+        }
+
+        // 
+
     });
 
-   
+    // update cid_to_rank
+    master.foreach ([&](BBlock *b, const diy::Master::ProxyWithLink &cp) {
+        update_cid_to_rank_vector(world, b->data, b->cid_to_rank);
+    });
 
-    // partition(world, dom, C, data, world.rank(), world.size(), bid_to_rank, &bside[0], partn, mesh_data);
+    // get ghost cells based on new partition
+    get_ghost_cells(master, assigner, N, dom, C, world.rank());
 
-    // // read data blocks for current process, set weights to be uniform
-    // read_data(world, infile.c_str(), data, weights, C, &bside[0]);
+    int nrounds = 1;
+    for (int i=0; i<nrounds; i++){
+
+        master.foreach ([&](BBlock *b, const diy::Master::ProxyWithLink &cp) {
+
+            std::map<int, std::vector<float>>::iterator it = b->data.begin();
+            while (it != b->data.end()){
+
+                int i = it->first;
+
+                // iterate over particles in cell i
+                for (size_t j=0; j<b->particles[i].size(); j++){
+                    
+                    BEndPt &cur_p = b->particles[i][j];
+                    bool finished = false;
+
+                    BEndPt next_p;
+                   
+                    // if (cur_p.pid == 821){
+                        // dprint("*************");
+                        // print_cellids_in_block(b->data);
+                        // print_cellids_in_block(b->data_ghost);
+                        // dprint("startingg %d in rank %d, cid %d", cur_p.pid, world.rank(), cur_p.cid);
+                        // dprint("stepsinit %f %f %f, nsteps %d, cid %d", cur_p[0], cur_p[1], cur_p[2], cur_p.nsteps, cur_p.cid);
+                    // badvect_rk1(cur_p, b, dom, C, 0.05, next_p);
+                        BSegment s;
+                        while(badvect_rk1(cur_p, b, dom, C, 0.05, next_p)){ // returns false if post cid is not in block
+
+                            // next_p.nsteps ++;
+                            cur_p = next_p;
+
+                            // dprint("steps %f %f %f, nsteps %d, cid %d", cur_p[0], cur_p[1], cur_p[2], cur_p.nsteps, cur_p.cid);
+
+                            if (check){
+                                BPt p;
+                                p.coords[0] = cur_p[0];
+                                p.coords[1] = cur_p[1];
+                                p.coords[2] = cur_p[2];
+                                s.pts.push_back(p);
+                            }
+                            
+                            if (cur_p.nsteps > max_steps){
+                                    finished = true;
+                                    break;
+                            }
+
+                        }
+                    // }
+                    // push back into segment
+                    b->segments.push_back(s);
+
+                    // if finished done++ else put in unfinised of the new cell
+
+
+
+                }
+
+                it++;
+            }
+
+            // get ghosts
+            b->data_ghost.clear();
+            b->bounds_ghost.clear();
+
+             // update cell weights
+            update_weights(world, b->particles, b->weights);
+                
+        });
+
+       
+        // rebalance cells
+
+        master.foreach ([&](BBlock *b, const diy::Master::ProxyWithLink &cp) {
+            assign(world, b->data, b->particles, b->weights, b->partn, b->mesh_data, b, cp, assigner, b->bounds);
+        });
+
+        // receive and update data
+        bool remote = true;
+        master.exchange(remote);
+        master.foreach (&remote_deq);
+
+        master.foreach ([&](BBlock *b, const diy::Master::ProxyWithLink &cp) {
+            update_cid_to_rank_vector(world, b->data, b->cid_to_rank);
+        });
+    }
 
     
-    //  master.foreach([&](BBlock* b, const diy::Master::ProxyWithLink& cp)
-    //             { remote_enq(b, cp, assigner); });
-    // bool remote = true;
-    // master.exchange(remote);
-    // master.foreach(&remote_deq);
+  
+   
 
+    // write trajectory segments for validation
+    if (check){
+         write_traces(master, assigner, decomposer, world);
 
-    // // use the assigner to assigne the cells to partitions (uses Zoltan), also move data blocks around accordingly
-    // assign(world, data, weights, partn, mesh_data);
+    }
 
-    // if (world.rank() == 0)
-    //     pvi (partn);
-
-
-
-
-
-    // perform advection and repartitioning over rounds
+    // clean up
+    master.foreach ([&](BBlock *b, const diy::Master::ProxyWithLink &cp) {
+            if(b->mesh_data.numMyPoints > 0){
+                free(b->mesh_data.myGlobalIDs);
+                free(b->mesh_data.x);
+                free(b->mesh_data.y);
+            }
+    });
 
     if (world.rank() ==0)
         dprint("done");
