@@ -6,7 +6,7 @@ add_executable              (ptrace-exchange ptrace.cpp advect.cpp misc.cpp)
 target_compile_definitions  (ptrace-exchange PUBLIC IEXCHANGE=0)
 
 
-add_executable(btrace btrace.cpp misc.cpp btrace/partitioning.cpp btrace/io.cpp btrace/advection.cpp btrace/bmisc.cpp)
+add_executable(btrace btrace.cpp misc.cpp btrace/partitioning.cpp btrace/io.cpp btrace/advection.cpp btrace/bmisc.cpp btrace/bblock.cpp)
 
 
 target_link_libraries       (ptrace-iexchange ${libraries} ${PNETCDF_LIBRARY} )

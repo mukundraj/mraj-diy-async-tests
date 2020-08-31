@@ -155,7 +155,7 @@ void assign(diy::mpi::communicator &world, std::map<int, std::vector<float>> &da
 
     /* General parameters */
 
-    Zoltan_Set_Param(zz, "DEBUG_LEVEL", "1");
+    Zoltan_Set_Param(zz, "DEBUG_LEVEL", "0");
     Zoltan_Set_Param(zz, "LB_METHOD", "RCB");
     Zoltan_Set_Param(zz, "NUM_GID_ENTRIES", "1"); 
     Zoltan_Set_Param(zz, "NUM_LID_ENTRIES", "1");
@@ -224,13 +224,13 @@ void assign(diy::mpi::communicator &world, std::map<int, std::vector<float>> &da
 
   //move_data(world, numImport, importGlobalGids, importProcs, numExport, exportGlobalGids, exportProcs, data);
 
-    std::map<int, datablock> stage;
+    
 
     // master.foreach([&](BBlock* b, const diy::Master::ProxyWithLink& cp)
     if (numExport>0){
         dprint("rank %d, numExport %d, cids [%d %d %d %d %d %d %d %d] toProcs [%d %d %d %d %d %d %d %d]", world.rank(), numExport, exportGlobalGids[0], exportGlobalGids[1], exportGlobalGids[2], exportGlobalGids[3], exportGlobalGids[4], exportGlobalGids[5], exportGlobalGids[6], exportGlobalGids[7], exportProcs[0], exportProcs[1],exportProcs[2],exportProcs[3],exportProcs[4],exportProcs[5],exportProcs[6],exportProcs[7]  );
     }
-    // std::map<int, std::vector<float>>::iterator it; 
+    std::map<int, datablock> stage;
     for (int i=0; i<numExport; i++){
        
         if (stage.find(exportProcs[i]) == stage.end()) { // if export procid has already added to stage
@@ -263,6 +263,8 @@ void assign(diy::mpi::communicator &world, std::map<int, std::vector<float>> &da
             bounds.erase(exportGlobalGids[i]);
 
         }
+        if (world.rank()==0)
+            dprint("%d exporting %d to %d", world.rank(), exportGlobalGids[i], exportProcs[i]);
     }
 
     
@@ -418,7 +420,7 @@ void partition(diy::mpi::communicator& world, bbounds &dom, int C, std::map<int,
     dom.cside[1] = (dom.max[1] - dom.min[1]+1)/C; 
     dom.cside[2] = (dom.max[2] - dom.min[2]+1)/C; 
 
-    dprint("rank %d, cside %d %d %d", rank, dom.cside[0], dom.cside[1], dom.cside[2]);
+    // dprint("rank %d, cside %d %d %d", rank, dom.cside[0], dom.cside[1], dom.cside[2]);
     // dprint("rank %d, ccoords %d %d %d | rpd %d", rank, ccoords[0],  ccoords[1], ccoords[2], rpd);
 
     
@@ -440,11 +442,11 @@ void partition(diy::mpi::communicator& world, bbounds &dom, int C, std::map<int,
 
     int bpr = C/rpd;
 
-    dprint("corner block ids rank %d | %d %d %d", rank, coords[0]*bpr, coords[1]*bpr, coords[2]*bpr);
+    // dprint("corner block ids rank %d | %d %d %d", rank, coords[0]*bpr, coords[1]*bpr, coords[2]*bpr);
     // dprint("rank block corner cells %d | bid %d %d %d", rank, coords[0]*bpr*side[0], coords[1]*bpr*side[0], coords[2]*bpr*side[0]);
 
-    if (rank==0)
-        dprint("sides %d %d %d | bpr %d", side[0], side[1], side[2], bpr);
+    // if (rank==0)
+    //     dprint("sides %d %d %d | bpr %d", side[0], side[1], side[2], bpr);
 
 
 
@@ -468,7 +470,7 @@ void partition(diy::mpi::communicator& world, bbounds &dom, int C, std::map<int,
                 // bnd.cside[2] = cside[2];
 
                 gid2bounds(bid, &cside[0], C, dom, bnd);
-                dprint("cid %d, rank %d, bnd %d %d %d |cside %d %d %d |%d", bid, world.rank(), bnd.max[0], bnd.max[1], bnd.max[2], bnd.cside[0], bnd.cside[1], bnd.cside[2], dom.max[2]);
+                // dprint("cid %d, rank %d, bnd %d %d %d |cside %d %d %d |%d", bid, world.rank(), bnd.max[0], bnd.max[1], bnd.max[2], bnd.cside[0], bnd.cside[1], bnd.cside[2], dom.max[2]);
                 std::pair<int,bbounds> tpair2(bid,bnd);
                 b->bounds.insert(tpair2);
 
@@ -562,7 +564,7 @@ void init_zoltan_input(MESH_DATA &myMesh, std::vector<int> &partn, std::map<int,
     
     std::map<int, std::vector<float>>::iterator it = data.begin();
 
-     myMesh.myGlobalIDs = (ZOLTAN_ID_TYPE *)malloc(sizeof(ZOLTAN_ID_TYPE) * nobj);
+    myMesh.myGlobalIDs = (ZOLTAN_ID_TYPE *)malloc(sizeof(ZOLTAN_ID_TYPE) * nobj);
     myMesh.x = (float *)malloc(sizeof(float) * nobj);
     myMesh.y = (float *)malloc(sizeof(float) * nobj);
     myMesh.z = (float *)malloc(sizeof(float) * nobj);
@@ -632,7 +634,7 @@ void get_nbrs_of_cell(int cid, std::vector<int>& nbrs, bbounds &bnd, bbounds &do
                     if (x >= dom.min[0] && x < dom.max[0] & 
                         y >= dom.min[1] && y < dom.max[1] &
                         z >= dom.min[2] && z < dom.max[2] ){
-                            int ccid = pos2cgid((float)x, (float)y, (float)z, bnd, C);
+                            int ccid = pos2cgid((float)x, (float)y, (float)z, dom, C);
                             // dprint("ctr %d (%d %d %d), ccid %d , (%d %d %d), %d %d, rank %d", ctr, i, j, k, ccid, x,y,z, bnd.min[2], dom.cside[2], rank);
                             nbrs.push_back(ccid);
                         }
@@ -666,8 +668,11 @@ void id_ghost_cells(std::map<int, std::vector<float>> &data, std::map<int, std::
         it++;
     }
 
-
+    // if (rank==6)
+    //     dprint("queue %d size %ld", rank, queue.size());
     std::vector<int> ghost_cids;
+
+    
 
     // while queue not empty
     while(queue.size()>0){
@@ -685,6 +690,10 @@ void id_ghost_cells(std::map<int, std::vector<float>> &data, std::map<int, std::
         // }
         get_nbrs_of_cell(ccid, nbrs, bounds[ccid], dom, C, rank);
 
+        if (rank==6){
+            dprint("**** got nbrs %d, %ld, ccid %d, bounds(%d %d, %d %d, %d %d), bndsize %ld", rank, nbrs.size(), ccid, bounds[ccid].min[0], bounds[ccid].max[0], bounds[ccid].min[1], bounds[ccid].max[1], bounds[ccid].min[2], bounds[ccid].max[2], bounds.size());
+            // pvi(nbrs);
+        }
         // push nbrs in queue and ghost_cids if not already in block
         for (auto &nbr_cid: nbrs){
             if (data.find(nbr_cid)==data.end()){
@@ -694,14 +703,13 @@ void id_ghost_cells(std::map<int, std::vector<float>> &data, std::map<int, std::
         
 
     }
-
-    dprint("ghost cids %ld", ghost_cids.size());
     // push the ghost ids to b->data_ghost
     for (auto &cid: ghost_cids){
         std::vector<float> tmp;
         data_ghost.insert(std::make_pair(cid, tmp));
         
     }
+     dprint("ghost cids %ld, rank %d", ghost_cids.size(), rank);
 }
 
 
@@ -711,13 +719,13 @@ void get_ghost_cells(diy::Master &master, const diy::RoundRobinAssigner &assigne
     // id ghost cells
     master.foreach ([&](BBlock *b, const diy::Master::ProxyWithLink &cp) {
         id_ghost_cells(b->data, b->data_ghost, b->bounds, dom, C, rank);
-        dprint("data ghost %d", b->data_ghost.size());
+        // dprint("data ghost %d, rank %d", b->data_ghost.size(), rank);
          // enqueue request for ghost cells using b->cid_to_rank using b->gid_to_rank
 
         std::map<int, data_req> stage;
 
         std::map<int, std::vector<float>>::iterator it = b->data_ghost.begin();
-
+        
         while (it != b->data_ghost.end()){
              int dest = b->cid_to_rank[it->first];
              int ccid = it->first;
@@ -728,28 +736,13 @@ void get_ghost_cells(diy::Master &master, const diy::RoundRobinAssigner &assigne
 
                  db.to_proc = dest;
                  db.from_proc = rank;
-                //  db.data.push_back(b->data[ccid]);
                  db.cids.push_back(ccid);
-                //  db.bounds.push_back(b->bounds[ccid]);
                  stage[dest] = db;
              }
             else
              {
-                //  stage[dest].data.push_back(b->data[ccid]);
                  stage[dest].cids.push_back(ccid);
-                //  stage[dest].bounds.push_back(b->bounds[ccid]);
              }
-
-            
-            // int dest = b->cid_to_rank[it->first];
-            // data_req msg;
-            // msg.to_proc = dest;
-            // msg.cid = it->first;
-            // msg.from_proc = rank;
-            
-            // remote_enq_blk_req(b, cp, assigner, msg);
-            
-            // fprintf(stderr, "%d ", it->first );
             it++;
         }
 
@@ -759,9 +752,7 @@ void get_ghost_cells(diy::Master &master, const diy::RoundRobinAssigner &assigne
     
     });
 
-  
 
-   
     // do rexchange
     bool remote = true;
     master.exchange(remote);
@@ -803,3 +794,41 @@ void get_ghost_cells(diy::Master &master, const diy::RoundRobinAssigner &assigne
 
 
 }
+
+
+void update_mesh_data(BBlock *b){
+
+    // b->mesh_data.numGlobalPoints = 0; // remains same
+    int nobj = b->data.size();
+    b->mesh_data.numMyPoints = nobj;
+    
+    // clean up
+    if(b->mesh_data.numMyPoints > 0){
+        free(b->mesh_data.myGlobalIDs);
+        free(b->mesh_data.x);
+        free(b->mesh_data.y);
+        free(b->mesh_data.z);
+    }
+
+    
+    b->mesh_data.myGlobalIDs = (ZOLTAN_ID_TYPE *)malloc(sizeof(ZOLTAN_ID_TYPE) * nobj);
+    b->mesh_data.x = (float *)malloc(sizeof(float) * nobj);
+    b->mesh_data.y = (float *)malloc(sizeof(float) * nobj);
+    b->mesh_data.z = (float *)malloc(sizeof(float) * nobj);
+    
+    std::map<int, std::vector<float>>::iterator it = b->data.begin();
+    int i=0;
+    while (it != b->data.end()){
+
+        b->mesh_data.myGlobalIDs[i] = it->first;
+        b->mesh_data.x[i] = it->second[i];
+        b->mesh_data.y[i] = it->second[nobj+i];
+        b->mesh_data.z[i] = it->second[2*nobj+i];
+
+        i++;
+        it++;
+    }
+
+
+}
+

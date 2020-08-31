@@ -93,12 +93,18 @@ void InitSeeds(Block *b,
                 EndPt p;
                 p.pid = (gid + 1) * 100 + b->init;
                 p.gid = gid;
+                // p[0] = 320;//i;
+                // p[1] = 320;//j;
+                // p[2] = 320; // k;
                 p[0] = i;
                 p[1] = j;
                 p[2] = k;
-                b->particles.push_back(p);
+                if (p.pid == 1521){
+                    b->particles.push_back(p);
+                    dprint("init %d: (%f %f %f)", p.pid, p[0], p[1], p[2]);
+                }
                 b->init++;
-                // dprint("init %d: (%f %f %f)", p.pid, p[0], p[1], p[2]);
+                
             }
         }
     }
@@ -163,8 +169,8 @@ void trace_particles(Block *b,
         Segment s(b->particles[i]);     // segment with one point p
         Pt next_p;                      // coordinates of next end point
         bool finished = false;
-        if (b->particles[i].pid == 800)
-            dprint("%f %f %f @ %d", cur_p.coords[0], cur_p.coords[1], cur_p.coords[2], cp.gid());
+        // if (b->particles[i].pid == 800)
+        //     dprint("%f %f %f @ %d", cur_p.coords[0], cur_p.coords[1], cur_p.coords[2], cp.gid());
 
         // trace this segment until it leaves the block
         while (advect_rk1(st, sz, vec, cur_p.coords.data(), 0.05, next_p.coords.data()))
@@ -178,6 +184,7 @@ void trace_particles(Block *b,
                 finished = true;
                 break;
             }
+            // dprint("nextp %f %f %f", next_p.coords[0], next_p.coords[1], next_p.coords[2]);
         }
         b->segments.push_back(s);
 
@@ -319,7 +326,7 @@ bool trace_particles_iex(Block *b,
             cur_p = next_p;
 
             // if (par.pid == 800)
-            //     dprint("%f %f %f @ %d", cur_p.coords[0], cur_p.coords[1], cur_p.coords[2], cp.gid());
+                // dprint("%f %f %f @ %d", cur_p.coords[0], cur_p.coords[1], cur_p.coords[2], cp.gid());
 
             if (par->nsteps >= max_steps)
             {
@@ -855,9 +862,9 @@ void write_traces(
         fprintf(stderr, "Check is turned on: merging traces to one block and writing them to disk\n");
         std::string filename;
         if (IEXCHANGE)
-            filename = "iexchange.txt";
+            filename = "itexchange.txt";
         else
-            filename = "exchange.txt";
+            filename = "texchange.txt";
         ((Block *)master.block(0))->write_segments(filename);
     }
 }

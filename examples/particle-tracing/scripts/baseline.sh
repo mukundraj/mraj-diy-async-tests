@@ -29,7 +29,7 @@ maxs="511 511 511"
 prediction=0
 
 num_procs=8
-opts="--blocks 8 --max-rounds 9999 --synthetic 0 --check 1"
+opts="--blocks 8 --max-rounds 9999 --synthetic 0 --check 0"
 args="$opts $infile $max_steps $sr $mins $maxs $prediction"
 mpiexec -n $num_procs $exe $args
 

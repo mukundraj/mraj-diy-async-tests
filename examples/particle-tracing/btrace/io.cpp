@@ -54,14 +54,23 @@ void read_data(diy::mpi::communicator& world, const char*  infile, std::map<int,
         // count[1] = b->bounds[i].cside[1];
         // count[2] = b->bounds[i].cside[0];
 
-        count[0] = b->bounds[i].max[0] - b->bounds[i].min[0];
+        // count[0] = b->bounds[i].max[2] - b->bounds[i].min[2];
+        // count[1] = b->bounds[i].max[1] - b->bounds[i].min[1];
+        // count[2] = b->bounds[i].max[0] - b->bounds[i].min[0]; 
+
+
+        count[0] = b->bounds[i].max[2] - b->bounds[i].min[2];
         count[1] = b->bounds[i].max[1] - b->bounds[i].min[1];
-        count[2] = b->bounds[i].max[2] - b->bounds[i].min[2];
+        count[2] = b->bounds[i].max[0] - b->bounds[i].min[0]; 
 
 
-        start[0] = ix*dom.cside[2];
+        // start[0] = ix*dom.cside[2];
+        // start[1] = iy*dom.cside[1];
+        // start[2] = iz*dom.cside[0];
+        start[0] = iz*dom.cside[2];
         start[1] = iy*dom.cside[1];
-        start[2] = iz*dom.cside[0];
+        start[2] = ix*dom.cside[0];
+
         if (world.rank()==7)
             dprint("start %d %d %d count %d %d %d, rank %d", start[0], start[1], start[2], count[0], count[1], count[2], world.rank());
 

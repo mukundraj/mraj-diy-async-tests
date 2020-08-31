@@ -2,8 +2,19 @@
 #include "../misc.h"
 #include <cmath>
 
+bool in_global_dom(bbounds &dom, BEndPt &p){
+    
+    bool inside = true;
+    for (int i=0; i<3; i++){
+        if (p[i] < dom.min[i] || p[i] > dom.max[i])
+            inside = false;
+    }
+    return inside;
+}
+
 inline float texel3d(std::vector<float> &vec, bbounds &bnd, int x, int y, int z, int v){
     size_t len = vec.size()/3;
+    // dprint("bcs %d %d %d", bnd.cside[0], bnd.cside[1], bnd.cside[2]);
     return vec[v*len + x + bnd.cside[0] * (y + bnd.cside[1] * z)];
 }
 
@@ -12,7 +23,11 @@ inline float texel3d(std::vector<float> &vec, bbounds &bnd, int x, int y, int z,
 //     return vec[v*len + x + (bnd.cside[0]+1) * (y + (bnd.cside[1]+1) * z)];
 // }
 
-bool badvect_rk1(BEndPt &pt, BBlock *b, bbounds &dom, int C, float h, BEndPt &next_p){
+bool badvect_rk1(BEndPt &pt, BBlock *b, bbounds &dom, int C, float h, BEndPt &next_p, int rank){
+
+    // pt[0] = 100.3;
+    // pt[1] = 100.4;
+    // pt[2] = 100.5;
 
      int cid = in_block(&pt[0], b->data, b->data_ghost, dom, C);
 
@@ -22,15 +37,19 @@ bool badvect_rk1(BEndPt &pt, BBlock *b, bbounds &dom, int C, float h, BEndPt &ne
 
     float p[3] = {pt[0], pt[1], pt[2]};
     float v[3];
+
      
+
      if (b->data.find(cid)!=b->data.end()){
          lerp(&p[0], b->bounds[cid], b->data[cid], &v[0]);
+        //  dprint("in main d->data[cid] size %ld", b->data[cid].size());
      }else if (b->data_ghost.find(cid) != b->data_ghost.end()){
-        //  dprint("d->data_ghost[cid] size %ld", b->data_ghost[cid].size());
+         if (b->data_ghost[cid].size()<1)
+         dprint("d->data_ghost[cid] size %ld, cid %d, pid %d, rank %d", b->data_ghost[cid].size(), cid, pt.pid, rank);
          lerp(&p[0], b->bounds_ghost[cid], b->data_ghost[cid], &v[0]);
 
      }
-     else{
+     else{ 
         next_p.pid = pt.pid;
         next_p[0] = pt[0];
         next_p[1] = pt[1];
@@ -40,6 +59,8 @@ bool badvect_rk1(BEndPt &pt, BBlock *b, bbounds &dom, int C, float h, BEndPt &ne
         // dprint("particle's cell not in block. exiting.");
         return false;
      }
+    //  dprint("vel %f %f %f, cid %d", v[0], v[1], v[2], cid);
+    //  exit(0);
 
     
      next_p.pid = pt.pid;
@@ -49,7 +70,8 @@ bool badvect_rk1(BEndPt &pt, BBlock *b, bbounds &dom, int C, float h, BEndPt &ne
      next_p.nsteps ++;
      int ccid = pos2cgid(next_p[0], next_p[1], next_p[2], dom, C);
      next_p.cid = ccid;
-    //  dprint("advected cblok %d, nsteps %d, next_p(%f %f %f), ccid %d, pid %d", cid, next_p.nsteps, next_p[0], next_p[1], next_p[2], ccid, next_p.pid);
+     if (pt.pid == 401)
+     dprint("advected cblok %d, nsteps %d, next_p(%f %f %f), ccid %d, pid %d", cid, next_p.nsteps, next_p[0], next_p[1], next_p[2], ccid, next_p.pid);
 
 
     return true;
@@ -115,7 +137,8 @@ int pos2cgid(float px, float py, float pz, bbounds &dom, int C){
 
     // int gid = C*C*(px/dom.cside[0]) + C*(py/dom.cside[1]) + pz/dom.cside[2]; 
     int gid = floor((px/(float)dom.cside[0])) + C*floor((py/(float)dom.cside[1])) + C*C*floor((pz/(float)dom.cside[2])); 
-    // dprint("p %f %f %f, cid %d", px, py, pz, gid);
+    // if (gid < 0)
+    //     dprint("lessthanzero p %f %f %f, cid %d, domcs %d %d %d", px, py, pz, gid, dom.cside[0], dom.cside[1], dom.cside[2]);
 
     return gid;
 }
@@ -140,17 +163,17 @@ void gid2bounds(int gid, int *cside, int C, bbounds &dom, bbounds &bnd){
 
     if (bnd.max[0] < dom.max[0]){
         bnd.max[0] += 1;
-        // bnd.cside[0] += 1;
+        bnd.cside[0] += 1;
     }
 
     if (bnd.max[1] < dom.max[1]){
         bnd.max[1] += 1;
-        // bnd.cside[1] += 1;
+        bnd.cside[1] += 1;
     }
 
     if (bnd.max[2] < dom.max[2]){
         bnd.max[2] += 1;
-        // bnd.cside[2] += 1;
+        bnd.cside[2] += 1;
     }
         
 }
@@ -189,8 +212,8 @@ void seed(BBlock *b, bbounds &dom, int C, float sr, int rank){
                         endp[2] = k;
                         endp.pid = (rank+1) * 100 + count;
                         endp.cid = gid;
-
-                        // dprint("rank %d, seed %d| %f %f %f", rank, endp.cid, i,j,k);
+                        // if (rank==0)
+                        //     dprint("rank %d, seed %d| %f %f %f | count %d", rank, endp.pid, i,j,k, count);
 
                         b->particles[gid].push_back(endp);
                         count ++;
@@ -221,4 +244,104 @@ void seed(BBlock *b, bbounds &dom, int C, float sr, int rank){
     }
 
     
+}
+
+
+void enqueue_local_particles(std::map<int, std::vector<BEndPt>> &unfinished_local, 
+std::map<int, std::vector<BEndPt>> &particles){
+
+   
+    // iterate over cells in block
+    for (auto &p : particles){
+        
+        if (unfinished_local.find(p.first) != unfinished_local.end()){
+            p.second = std::move(unfinished_local[p.first]);
+            dprint("unfinised exist");
+        }else{
+            // p.second.clear();
+            particles.erase(p.first);
+        }
+
+    }
+
+
+}
+
+inline void remote_enq_nonlocal(BBlock*,
+        const diy::Master::ProxyWithLink&   cp,
+        const diy::Assigner&                assigner, 
+        datablock &db){
+
+    int my_gid              = cp.gid();
+    int dest_gid            = db.to_proc;
+    int dest_proc           = assigner.rank(dest_gid);
+    diy::BlockID dest_block = {dest_gid, dest_proc};
+
+    // db.gid = my_gid;
+    // if (my_gid == 4)
+    //     dprint("enqing my_gid %d, dest_gid %d, dest_proc %d, size %ld", my_gid, dest_gid, dest_proc, db.cgid.size());
+
+    cp.enqueue(dest_block, db);
+
+
+}
+
+inline void remote_deq_nonlocal(
+       BBlock* b, const diy::Master::ProxyWithLink& cp
+){
+    std::vector<int> incoming_gids;
+    cp.incoming(incoming_gids);
+    for (size_t i = 0; i < incoming_gids.size(); i++)
+        if (cp.incoming(incoming_gids[i]).size())
+        {   
+            datablock recvd_data;
+            cp.dequeue(incoming_gids[i], recvd_data);
+            // if (cp.gid()==0)
+            //     dprint("recvd from %d in %d", recvd_data.from_proc, recvd_data.to_proc);
+            for(int i=0; i< recvd_data.cgid.size(); i++){
+                int cid = recvd_data.cgid[i]; 
+
+                // if (cp.gid()==0)
+                    // dprint("recvd cellid %d, fromrank %d", cid, recvd_data.from_proc);
+
+                // enqueue received particles into b->particles[cid]
+                b->particles[cid].insert(b->particles[cid].end(), recvd_data.particles[i].begin(), recvd_data.particles[i].end());
+            }
+        } 
+}
+
+void exchange_nonlocal_particles(diy::Master &master, const diy::Assigner& assigner){
+
+    // enqueue nonlocal particles
+     master.foreach ([&](BBlock *b, const diy::Master::ProxyWithLink &cp) {
+        
+           // iterating over each dest rank
+           for (auto &plist : b->unfinished_nonlocal){
+               datablock db;
+               int dest_rank = plist.first;
+               
+               db.to_proc = dest_rank;
+               db.from_proc = cp.gid(); // only for debugging
+               
+            //    if (db.from_proc==4)
+            //         dprint("dest_rank %d, rank %d, unfin_nonloc %ld, to_proc %d", dest_rank , cp.gid(), b->unfinished_nonlocal.size(), db.to_proc);
+                for (auto next_p: plist.second){
+                    db.cgid.push_back(next_p.cid);
+                    db.particles.push_back( std::move(plist.second));
+                }
+
+                remote_enq_nonlocal(b, cp, assigner, db);
+           }
+
+            
+     });
+
+
+
+    // rexchange, retrieve and pocess particles
+    bool remote = true;
+    master.exchange(remote);
+    master.foreach(&remote_deq_nonlocal);
+
+
 }

@@ -15,7 +15,10 @@ struct BPt
 struct BSegment{
     int pid;        // 
     std::vector<BPt> pts; // points along trace
-    int gid;        
+    int gid;       
+
+    BSegment(BEndPt &cur_pt); 
+    BSegment();
 };
 
 struct MESH_DATA{
@@ -53,7 +56,9 @@ struct BBlock
 
   // for advection
   std::map<int, std::vector<BEndPt>> particles;
-  std::map<int, std::vector<BEndPt>> unfinished_particles;
+  std::map<int, std::vector<BEndPt>> unfinished_local;
+  std::map<int, std::vector<BEndPt>> unfinished_nonlocal;
+
   std::map<int, bbounds> bounds;
   std::map<int, bbounds> bounds_ghost;
 

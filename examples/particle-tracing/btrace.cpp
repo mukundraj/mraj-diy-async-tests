@@ -163,6 +163,9 @@ void remote_deq(BBlock* b, const diy::Master::ProxyWithLink& cp)
                 b->bounds[recvd_data.cgid[i]] = std::move(recvd_data.bounds[i]);
             }   
         }
+
+    update_mesh_data(b);
+
 }
 
 // merge traces at the root block
@@ -238,14 +241,20 @@ void write_traces(
 
 
     master.foreach ([&](BBlock *b, const diy::Master::ProxyWithLink &cp) {
-        for (size_t i=0; i<b->segments.size(); i++){
-            for (size_t j=0; j<b->segments[i].pts.size(); j++){
-                segs.push_back(b->segments[i].pts[j].coords[0]);
-                segs.push_back(b->segments[i].pts[j].coords[1]);
-                segs.push_back(b->segments[i].pts[j].coords[2]);
+
+        // if (world.rank()==0)
+            for (size_t i=0; i<b->segments.size(); i++){
+                for (size_t j=0; j<b->segments[i].pts.size(); j++){
+                    segs.push_back(b->segments[i].pts[j].coords[0]);
+                    segs.push_back(b->segments[i].pts[j].coords[1]);
+                    segs.push_back(b->segments[i].pts[j].coords[2]);
+
+                    // dprint("segg %f %f %f| %ld", b->segments[i].pts[j].coords[0], b->segments[i].pts[j].coords[1], b->segments[i].pts[j].coords[2], b->segments[i].pts.size());
+                }
+                sizes.push_back(b->segments[i].pts.size());
+                // dprint("%ld (%f %f %f)", i, b->segments[i].pts[0].coords[0], b->segments[i].pts[0].coords[1], b->segments[i].pts[0].coords[2]);
+                // pvi(sizes);
             }
-            sizes.push_back(b->segments[i].pts.size());
-        }
 
     });
 
@@ -253,30 +262,37 @@ void write_traces(
     diy::mpi::gather(world, sizes, all_sizes, 0);
 
    
-
+   
 
 
     if (master.communicator().rank() == 0)
     {
 
-        
+         dprint("segs2size %ld", segs2.size());
+    
         std::vector<Segment> all_segs;
         
         for(size_t i=0; i<all_sizes.size(); i++){
+            size_t idx=0;
             for (size_t j=0; j<all_sizes[i].size(); j++){
                 Segment seg;
-                size_t idx=0;
+                
+                
                 for(int k=0; k<all_sizes[i][j]; k++){
+                    // dprint("all_sizes[i][j] %d, idx %ld, %f %f %f", all_sizes[i][j], idx, segs2[i][idx*3], segs2[i][idx*3+1], segs2[i][idx*3+2]);
                     Pt p;
                     p.coords[0] = segs2[i][idx*3];
                     p.coords[1] = segs2[i][idx*3+1];
                     p.coords[2] = segs2[i][idx*3+2];
                     seg.pts.push_back(p);
                     idx++;
+                    // dprint("op %f %f %f", p.coords[0], p.coords[1], p.coords[2]);
                 }
+                // dprint("i %d j %d sizes %ld, csize %ld ", i, j, all_sizes[i][j], segs2[i].size());
+                all_segs.push_back(seg);
 
             }
-            dprint("sizes %ld ", all_sizes[i].size());
+            
         }
 
         fprintf(stderr, "Check is turned on: merging traces to one block and writing them to disk\n");
@@ -430,18 +446,6 @@ int main(int argc, char **argv){
         // assign and send
         assign(world, b->data, b->particles, b->weights, b->partn, b->mesh_data, b, cp, assigner, b->bounds );
 
-
-        // int gid = pos2cgid(130,10,10, dom, C);
-        // dprint("gid %d", gid);
-        
-        // bbounds bnd;
-        // gid2bounds(gid, &dom.cside[0], C, bnd);
-        // dprint("bnd [%d %d] [%d %d] [%d %d], rank %d", bnd.min[0], bnd.max[0], bnd.min[1], bnd.max[1], bnd.min[2], bnd.max[2], world.rank());
-
-        
-
-        // dprint("seeded %ld, seed_rate %f, rank %d", b->particles.size(), seed_rate, world.rank());
-
     });
 
     // receive and update data
@@ -468,27 +472,27 @@ int main(int argc, char **argv){
       
         seed(b, dom, C, seed_rate, world.rank());
 
-        std::map<int, std::vector<BEndPt>>::iterator it = b->particles.begin();
-        while (it != b->particles.end()){
-            // if(cp.gid()==0 ){
-                // dprint("rank [%d %d], cid %d, particles %ld, seed_rate %f", world.rank(), cp.gid(), it->first, it->second.size(), seed_rate);
+        // std::map<int, std::vector<BEndPt>>::iterator it = b->particles.begin();
+        // while (it != b->particles.end()){
+        //     // if(cp.gid()==0 ){
+        //         // dprint("rank [%d %d], cid %d, particles %ld, seed_rate %f", world.rank(), cp.gid(), it->first, it->second.size(), seed_rate);
             
-            // }
-            it++;
-        }
+        //     // }
+        //     it++;
+        // }
 
-        // interpolate
-        float pt[3] = {100.3,100.4,100.5};
+        // // interpolate
+        // float pt[3] = {100.3,100.4,100.5};
 
-        // dprint("inblock %d, rank %d", in_block(&pt[0], b->data, dom, C), world.rank());
-        int cblock = in_block(&pt[0], b->data, b->data_ghost, dom, C);
-        if (cblock>-1){
+        // // dprint("inblock %d, rank %d", in_block(&pt[0], b->data, dom, C), world.rank());
+        // int cblock = in_block(&pt[0], b->data, b->data_ghost, dom, C);
+        // if (cblock>-1){
 
-            float v[3];
-            lerp(&pt[0], b->bounds[cblock], b->data[cblock], &v[0]);
+        //     float v[3];
+        //     lerp(&pt[0], b->bounds[cblock], b->data[cblock], &v[0]);
 
-            // dprint("interpolated %f %f %f | cblock %d", v[0], v[1], v[2], cblock);
-        }
+        //     // dprint("interpolated %f %f %f | cblock %d", v[0], v[1], v[2], cblock);
+        // }
 
         // 
 
@@ -502,38 +506,51 @@ int main(int argc, char **argv){
     // get ghost cells based on new partition
     get_ghost_cells(master, assigner, N, dom, C, world.rank());
 
-    int nrounds = 1;
-    for (int i=0; i<nrounds; i++){
+     master.foreach ([&](BBlock *b, const diy::Master::ProxyWithLink &cp) {
+            dprint("myrank %d, data_ghost %ld", cp.gid(), b->data_ghost.size());
+            // b->data_ghost.clear();
+     });
+
+    int nrounds = 2;
+    for (int round=0; round<nrounds; round++){
+
+        if (world.rank()==0)
+            dprint("!! starting round %d", round);
 
         master.foreach ([&](BBlock *b, const diy::Master::ProxyWithLink &cp) {
 
             std::map<int, std::vector<float>>::iterator it = b->data.begin();
             while (it != b->data.end()){
 
-                int i = it->first;
+                int cid = it->first;
+                
+                // dprint("rank %d, particles %d", world.rank(), b->particles.size());
+                // continue;
+
+                 //  if (round>0){
+                        // dprint("rank %d cid %d numcells %ld, %ld", world.rank(), cid, b->data.size(), b->particles.size());
+                        
+                    //  }
 
                 // iterate over particles in cell i
-                for (size_t j=0; j<b->particles[i].size(); j++){
+                if (b->particles.find(cid)!=b->particles.end())
+                for (size_t j=0; j<b->particles[cid].size(); j++){
                     
-                    BEndPt &cur_p = b->particles[i][j];
+                    BEndPt &cur_p = b->particles[cid][j];
                     bool finished = false;
-
+                   
                     BEndPt next_p;
                    
-                    // if (cur_p.pid == 821){
-                        // dprint("*************");
-                        // print_cellids_in_block(b->data);
-                        // print_cellids_in_block(b->data_ghost);
-                        // dprint("startingg %d in rank %d, cid %d", cur_p.pid, world.rank(), cur_p.cid);
-                        // dprint("stepsinit %f %f %f, nsteps %d, cid %d", cur_p[0], cur_p[1], cur_p[2], cur_p.nsteps, cur_p.cid);
-                    // badvect_rk1(cur_p, b, dom, C, 0.05, next_p);
-                        BSegment s;
-                        while(badvect_rk1(cur_p, b, dom, C, 0.05, next_p)){ // returns false if post cid is not in block
+       
+                        BSegment s(cur_p);
+                        while(badvect_rk1(cur_p, b, dom, C, 0.05, next_p, world.rank())){ // returns false if post cid is not in block
 
+                           
+                        
+                        
                             // next_p.nsteps ++;
                             cur_p = next_p;
-
-                            // dprint("steps %f %f %f, nsteps %d, cid %d", cur_p[0], cur_p[1], cur_p[2], cur_p.nsteps, cur_p.cid);
+                           
 
                             if (check){
                                 BPt p;
@@ -542,34 +559,63 @@ int main(int argc, char **argv){
                                 p.coords[2] = cur_p[2];
                                 s.pts.push_back(p);
                             }
-                            
-                            if (cur_p.nsteps > max_steps){
+
+                            // check for exit conditions : global bounds and max steps
+                            if (cur_p.nsteps > max_steps || in_global_dom(dom, cur_p)==false){
                                     finished = true;
                                     break;
                             }
+                            // if (next_p.pid == 401)
+                            // dprint("steps %f %f %f, nsteps %d, pcid %d, cid %d", cur_p[0], cur_p[1], cur_p[2], cur_p.nsteps, cur_p.cid, cid);
 
                         }
+                    
+                        // push back into segment
+                        b->segments.push_back(s);
                     // }
-                    // push back into segment
-                    b->segments.push_back(s);
-
                     // if finished done++ else put in unfinised of the new cell
+                    if (finished == true){
 
+                    }else{
+
+                        // // if in current rank's cell: key is a cid
+                        if (b->data.find(next_p.cid) != b->data.end()){
+                            b->unfinished_local[next_p.cid].push_back(next_p);
+                        }
+                        // else for export : key is a rank
+                        else{
+                            // if (next_p.pid==401)
+                            // if (world.rank()==4)
+                            //     dprint("unfin nonloc cid for rank %d, cid %d, pid %d", world.rank(), next_p.cid, next_p.pid);
+                            int to_rank = b->cid_to_rank[next_p.cid];
+                            b->unfinished_nonlocal[to_rank].push_back(next_p);
+                        }
+
+                    }
 
 
                 }
-
                 it++;
             }
 
-            // get ghosts
-            b->data_ghost.clear();
-            b->bounds_ghost.clear();
+            
+
+            
+
+            // reenqueue local particles and clears finished particles
+            enqueue_local_particles(b->unfinished_local, b->particles);
+
+
 
              // update cell weights
             update_weights(world, b->particles, b->weights);
-                
+
+
+
         });
+
+        // exchange non local particles
+        exchange_nonlocal_particles(master, assigner);
 
        
         // rebalance cells
@@ -585,7 +631,33 @@ int main(int argc, char **argv){
 
         master.foreach ([&](BBlock *b, const diy::Master::ProxyWithLink &cp) {
             update_cid_to_rank_vector(world, b->data, b->cid_to_rank);
+
+            if (world.rank()==0)
+                pvi(b->cid_to_rank);
         });
+       
+
+        if (world.rank() == 0)
+            dprint("getting ghost for round %d", round);
+        // get ghost cells based on new partition
+
+       master.foreach ([&](BBlock *b, const diy::Master::ProxyWithLink &cp) {
+            // dprint("myrankinloop %d, data_ghost %ld", cp.gid(), b->data_ghost.size());
+            // dprint("!myrankinloop %d, data %ld", cp.gid(), b->data.size());
+            b->data_ghost.clear();
+            b->bounds_ghost.clear();
+       });
+        
+       
+       get_ghost_cells(master, assigner, N, dom, C, world.rank());
+        
+    //    master.foreach ([&](BBlock *b, const diy::Master::ProxyWithLink &cp) {
+    //         // dprint("myrankinloop2 %d, data_ghost %ld", cp.gid(), b->data_ghost.size());
+    //         dprint("!myrankinloop2 %d, data %ld", cp.gid(), b->data.size());
+    //         b->data_ghost.clear();
+    //         b->bounds_ghost.clear();
+    //    });
+
     }
 
     
@@ -604,6 +676,7 @@ int main(int argc, char **argv){
                 free(b->mesh_data.myGlobalIDs);
                 free(b->mesh_data.x);
                 free(b->mesh_data.y);
+                free(b->mesh_data.z);
             }
     });
 

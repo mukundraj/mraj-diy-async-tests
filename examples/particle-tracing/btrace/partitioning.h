@@ -29,6 +29,6 @@ void id_ghost_cells(std::map<int, std::vector<float>> &data, std::map<int, std::
 // get nbrs of cell (upto 27 nbrs)
 void get_nbrs_of_cell(int cid, std::vector<int>& nbrs, bbounds &bnd, bbounds &dom, int C, int rank);
 
-
+void update_mesh_data(BBlock *b);
 
 #endif
