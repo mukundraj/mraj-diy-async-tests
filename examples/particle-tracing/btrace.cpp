@@ -405,6 +405,9 @@ int main(int argc, char **argv){
         diy::Link*   link = new diy::Link;   // link is this block's neighborhood
         master.add(gid, new BBlock, link);    // add the current local block to the master
     }
+
+    size_t nsteps = 0, init = 0, done = 0;
+
     // definitions
     // element: 1x1x1 pixel
     // cell: smallest unit that can be moved around (formerly block)
@@ -471,6 +474,8 @@ int main(int argc, char **argv){
 
       
         seed(b, dom, C, seed_rate, world.rank());
+        init = b->particles.size();
+        dprint("initialized %ld", init);
 
         // std::map<int, std::vector<BEndPt>>::iterator it = b->particles.begin();
         // while (it != b->particles.end()){
@@ -511,7 +516,7 @@ int main(int argc, char **argv){
             // b->data_ghost.clear();
      });
 
-    int nrounds = 2;
+    int nrounds = 1;
     for (int round=0; round<nrounds; round++){
 
         if (world.rank()==0)
@@ -545,7 +550,7 @@ int main(int argc, char **argv){
                         BSegment s(cur_p);
                         while(badvect_rk1(cur_p, b, dom, C, 0.05, next_p, world.rank())){ // returns false if post cid is not in block
 
-                           
+                            nsteps ++;
                         
                         
                             // next_p.nsteps ++;
@@ -575,6 +580,7 @@ int main(int argc, char **argv){
                     // }
                     // if finished done++ else put in unfinised of the new cell
                     if (finished == true){
+                        done++;
 
                     }else{
 
@@ -661,6 +667,18 @@ int main(int argc, char **argv){
     }
 
     
+    size_t nsteps_global=0;
+    diy::mpi::reduce(world, nsteps, nsteps_global, 0, std::plus<size_t>());
+
+    size_t done_global=0;
+    diy::mpi::reduce(world, done, done_global, 0, std::plus<size_t>());
+
+    size_t init_global=0;
+    diy::mpi::reduce(world, init, init_global, 0, std::plus<size_t>());
+
+    if (world.rank()==0){
+        dprint("nsteps_global %ld, init_global %ld, done_global %ld", nsteps_global, init_global, done_global);
+    }
   
    
 
@@ -679,6 +697,8 @@ int main(int argc, char **argv){
                 free(b->mesh_data.z);
             }
     });
+
+    
 
     if (world.rank() ==0)
         dprint("done");
