@@ -23,7 +23,7 @@ inline float texel3d(std::vector<float> &vec, bbounds &bnd, int x, int y, int z,
 //     return vec[v*len + x + (bnd.cside[0]+1) * (y + (bnd.cside[1]+1) * z)];
 // }
 
-bool badvect_rk1(BEndPt &pt, BBlock *b, bbounds &dom, int C, float h, BEndPt &next_p, int rank){
+bool badvect_rk1(BEndPt &pt, BBlock *b, bbounds &dom, int *C, float h, BEndPt &next_p, int rank){
 
     // pt[0] = 100.3;
     // pt[1] = 100.4;
@@ -67,11 +67,11 @@ bool badvect_rk1(BEndPt &pt, BBlock *b, bbounds &dom, int C, float h, BEndPt &ne
      next_p[0] = p[0] + h*v[0];   
      next_p[1] = p[1] + h*v[1];   
      next_p[2] = p[2] + h*v[2]; 
-     next_p.nsteps ++;
+     next_p.nsteps = pt.nsteps + 1;
      int ccid = pos2cgid(next_p[0], next_p[1], next_p[2], dom, C);
      next_p.cid = ccid;
-     if (pt.pid == 401)
-     dprint("advected cblok %d, nsteps %d, next_p(%f %f %f), ccid %d, pid %d", cid, next_p.nsteps, next_p[0], next_p[1], next_p[2], ccid, next_p.pid);
+    //  if (pt.pid == 401)
+    //  dprint("advected cblok %d, nsteps %d, next_p(%f %f %f), ccid %d, pid %d", cid, next_p.nsteps, next_p[0], next_p[1], next_p[2], ccid, next_p.pid);
 
 
     return true;
@@ -123,7 +123,7 @@ void lerp(float *pt, bbounds &bnd,  std::vector<float> &vec, float *vars){
 
 }
 
-int in_block(float *pt, std::map<int, std::vector<float>> &data, std::map<int, std::vector<float>> &data_ghost, bbounds &dom, int C){
+int in_block(float *pt, std::map<int, std::vector<float>> &data, std::map<int, std::vector<float>> &data_ghost, bbounds &dom, int *C){
 
     int gid = pos2cgid(pt[0], pt[1], pt[2], dom, C);
 
@@ -133,22 +133,22 @@ int in_block(float *pt, std::map<int, std::vector<float>> &data, std::map<int, s
     return gid;
 }
 
-int pos2cgid(float px, float py, float pz, bbounds &dom, int C){
+int pos2cgid(float px, float py, float pz, bbounds &dom, int *C){
 
     // int gid = C*C*(px/dom.cside[0]) + C*(py/dom.cside[1]) + pz/dom.cside[2]; 
-    int gid = floor((px/(float)dom.cside[0])) + C*floor((py/(float)dom.cside[1])) + C*C*floor((pz/(float)dom.cside[2])); 
+    int gid = floor((px/(float)dom.cside[0])) + C[0]*floor((py/(float)dom.cside[1])) + C[0]*C[1]*floor((pz/(float)dom.cside[2])); 
     // if (gid < 0)
     //     dprint("lessthanzero p %f %f %f, cid %d, domcs %d %d %d", px, py, pz, gid, dom.cside[0], dom.cside[1], dom.cside[2]);
 
     return gid;
 }
 
-void gid2bounds(int gid, int *cside, int C, bbounds &dom, bbounds &bnd){
+void gid2bounds(int gid, int *cside, int *C, bbounds &dom, bbounds &bnd){
 
 
-    int c2 = gid / (C*C); // slowest varying
-    int c1 = (gid % (C*C)) / C;
-    int c0 = (gid % (C*C)) % C; // fastest varying
+    int c2 = gid / (C[0]*C[1]); // slowest varying
+    int c1 = (gid % (C[0]*C[1])) / C[0];
+    int c0 = (gid % (C[0]*C[1])) % C[0]; // fastest varying
 
     bnd.min[0] = c0*cside[0];
     bnd.max[0] = c0*cside[0] + cside[0];
@@ -186,7 +186,7 @@ bool inside(float *pt, bbounds &bnd){
     return true;
 }
 
-void seed(BBlock *b, bbounds &dom, int C, float sr, int rank){
+int seed(BBlock *b, bbounds &dom, int *C, float sr, int rank){
 
 
     
@@ -199,7 +199,7 @@ void seed(BBlock *b, bbounds &dom, int C, float sr, int rank){
 
                     
                     float pt[3] = {i,j,k};
-                    int gid = pos2cgid(pt[0], pt[1], pt[2], dom, C); 
+                    int gid = pos2cgid(pt[0], pt[1], pt[2], dom, &C[0]); 
 
                     // if (rank == 0){
                     //         dprint(" in rank 0, gid %d, (%f %f %f), dom [%f %f %f]", gid, i, j, k, i/(float)dom.cside[0], j/(float)dom.cside[1], k/(float)dom.cside[2]);
@@ -210,7 +210,8 @@ void seed(BBlock *b, bbounds &dom, int C, float sr, int rank){
                         endp[0] = i;
                         endp[1] = j;
                         endp[2] = k;
-                        endp.pid = (rank+1) * 100 + count;
+                        // endp.pid = (rank+1) * 100 + count;
+                        endp.pid = i*512*512 + j*512 + k;
                         endp.cid = gid;
                         // if (rank==0)
                         //     dprint("rank %d, seed %d| %f %f %f | count %d", rank, endp.pid, i,j,k, count);
@@ -243,7 +244,7 @@ void seed(BBlock *b, bbounds &dom, int C, float sr, int rank){
         }
     }
 
-    
+    return count;
 }
 
 
@@ -303,7 +304,7 @@ inline void remote_deq_nonlocal(
 
                 // if (cp.gid()==0)
                     // dprint("recvd cellid %d, fromrank %d", cid, recvd_data.from_proc);
-
+                // dprint("received pid %d, nsteps %d", recvd_data.particles[i][0].pid, recvd_data.particles[i][0].nsteps);
                 // enqueue received particles into b->particles[cid]
                 b->particles[cid].insert(b->particles[cid].end(), recvd_data.particles[i].begin(), recvd_data.particles[i].end());
             }

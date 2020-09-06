@@ -396,7 +396,7 @@ static void move_data(diy::mpi::communicator &world, int numImport, unsigned int
 }
 
 
-void partition(diy::mpi::communicator& world, bbounds &dom, int C, std::map<int, std::vector<float>> & data, int rank, int worldsize, std::vector<int> &cid_to_rank, int *cside, std::vector<int> &part, MESH_DATA &mesh_data, BBlock* b){
+void partition(diy::mpi::communicator& world, bbounds &dom, int* C, std::map<int, std::vector<float>> & data, int rank, int worldsize, std::vector<int> &cid_to_rank, int *cside, std::vector<int> &part, MESH_DATA &mesh_data, BBlock* b){
     
    
     // int S =  C * cellsperblockside // cells per side;
@@ -404,43 +404,39 @@ void partition(diy::mpi::communicator& world, bbounds &dom, int C, std::map<int,
     // int num_per_side[3] =  {(dom.max[0] - dom.min[0]+1)/side[0], (dom.max[0] - dom.min[0]+1)/side[1], (dom.max[0] - dom.min[0]+1)/side[2]}; 
     // int corner_cell_id = rank / (C*C) + rank / C + rank % C;
     // int corner_cell_id =  rank / (num_per_side[0]) +  rank / num_per_side[1] +  rank % num_per_side[2];
+    int cell_res_factor = 2; 
+    int rpd[3] = {C[0] / cell_res_factor, C[1] / cell_res_factor, C[2] / cell_res_factor}; //{worldsize/C, worldsize/C, worldsize/C}; // ranks per dimension
 
-    int rpd = worldsize / C; //{worldsize/C, worldsize/C, worldsize/C}; // ranks per dimension
+    int c2 = rank / (rpd[0]*rpd[1]); // slowest varying
+    int c1 = (rank % (rpd[0]*rpd[1])) / rpd[0];
+    int c0 = (rank % (rpd[0]*rpd[1])) % rpd[0]; // fastest varying
 
-    int c2 = rank / (rpd*rpd); // slowest varying
-    int c1 = (rank % (rpd*rpd)) / rpd;
-    int c0 = (rank % (rpd*rpd)) % rpd; // fastest varying
-    
-    
-    int side[3] = {(dom.max[0] - dom.min[0]+1)/rpd, (dom.max[0] - dom.min[0]+1)/rpd, (dom.max[0] - dom.min[0]+1)/rpd }; // cells per side of a rank
     int coords[3] = {c2, c1, c0};
+    
+    
+    int side[3] = {(dom.max[0] - dom.min[0]+1)/rpd[0], (dom.max[0] - dom.min[0]+1)/rpd[1], (dom.max[0] - dom.min[0]+1)/rpd[2] }; // cells per side of a rank
+   
 
     int ccoords[3] =  {coords[0]*side[0], coords[1]*side[1], coords[2]*side[2]};// side of block
-    dom.cside[0] = (dom.max[0] - dom.min[0]+1)/C; 
-    dom.cside[1] = (dom.max[1] - dom.min[1]+1)/C; 
-    dom.cside[2] = (dom.max[2] - dom.min[2]+1)/C; 
+    dom.cside[0] = (dom.max[0] - dom.min[0]+1)/C[0]; 
+    dom.cside[1] = (dom.max[1] - dom.min[1]+1)/C[1]; 
+    dom.cside[2] = (dom.max[2] - dom.min[2]+1)/C[2]; 
 
     // dprint("rank %d, cside %d %d %d", rank, dom.cside[0], dom.cside[1], dom.cside[2]);
-    // dprint("rank %d, ccoords %d %d %d | rpd %d", rank, ccoords[0],  ccoords[1], ccoords[2], rpd);
+   
 
     
 
 
-    cside[0]= (dom.max[0] - dom.min[0]+1)/C;
-    cside[1] =  (dom.max[0] - dom.min[0]+1)/C;
-    cside[2] = (dom.max[0] - dom.min[0]+1)/C ; // cells per side of a block
-    // dprint("bside %d %d %d", bside[0], bside[1], bside[2]);
+    cside[0]= (dom.max[0] - dom.min[0]+1)/C[0];
+    cside[1] =  (dom.max[1] - dom.min[1]+1)/C[1];
+    cside[2] = (dom.max[2] - dom.min[2]+1)/C[2] ; // pixels per side of a cell
 
     // populate the block ids into the map
 
-    // int bpd = C; // cells per dimension
-    // int T = C*C*C; // 
 
-    // c2 = T / (bpd*bpd); // slowest varying
-    // c1 = (T % (bpd*bpd)) / bpd;
-    // c0 = (T % (bpd*bpd)) % bpd; // fastest varying
-
-    int bpr = C/rpd;
+    int bpr[3] = {C[2]/rpd[2], C[1]/rpd[1], C[0]/rpd[0]};
+     dprint("worldsize %d rank %d, coords %d %d %d | bpr %d %d %d | rpd %d %d %d", worldsize, rank, coords[0],  coords[1], coords[2], bpr[0], bpr[1], bpr[2], rpd[0], rpd[1], rpd[2]);
 
     // dprint("corner block ids rank %d | %d %d %d", rank, coords[0]*bpr, coords[1]*bpr, coords[2]*bpr);
     // dprint("rank block corner cells %d | bid %d %d %d", rank, coords[0]*bpr*side[0], coords[1]*bpr*side[0], coords[2]*bpr*side[0]);
@@ -452,10 +448,10 @@ void partition(diy::mpi::communicator& world, bbounds &dom, int C, std::map<int,
 
     // add the cell ids to the map and set current rank in cid_to_rank
     
-    for (int i=coords[0]*bpr; i<coords[0]*bpr+bpr; i++){
-        for (int j=coords[1]*bpr; j< coords[1]*bpr+bpr; j++){
-            for (int k=coords[2]*bpr; k < coords[2]*bpr+bpr; k++){
-                int bid = i*C*C + j*C + k;
+    for (int i=coords[0]*bpr[0]; i<coords[0]*bpr[0]+bpr[0]; i++){
+        for (int j=coords[1]*bpr[1]; j< coords[1]*bpr[1]+bpr[1]; j++){
+            for (int k=coords[2]*bpr[2]; k < coords[2]*bpr[2]+bpr[2]; k++){
+                int bid = i*C[0]*C[1] + j*C[0] + k;
                 // dprint ("rank %d, bid %d", rank, bid);
 
                 std::vector<float> temp(3*cside[0]*cside[1]*cside[2]);
@@ -465,11 +461,9 @@ void partition(diy::mpi::communicator& world, bbounds &dom, int C, std::map<int,
                 cid_to_rank[bid] = rank;
 
                 bbounds bnd;
-                // bnd.cside[0] = cside[0];
-                // bnd.cside[1] = cside[1];
-                // bnd.cside[2] = cside[2];
+                
 
-                gid2bounds(bid, &cside[0], C, dom, bnd);
+                gid2bounds(bid, &cside[0], &C[0], dom, bnd);
                 // dprint("cid %d, rank %d, bnd %d %d %d |cside %d %d %d |%d", bid, world.rank(), bnd.max[0], bnd.max[1], bnd.max[2], bnd.cside[0], bnd.cside[1], bnd.cside[2], dom.max[2]);
                 std::pair<int,bbounds> tpair2(bid,bnd);
                 b->bounds.insert(tpair2);
@@ -481,7 +475,7 @@ void partition(diy::mpi::communicator& world, bbounds &dom, int C, std::map<int,
     MPI_Allreduce(&cid_to_rank[0], &part[0], cid_to_rank.size(), MPI_INT, MPI_SUM, world);
 
 
-    dprint("data size %d, %ld", data.size(), cid_to_rank.size());
+    // dprint("data size %d, %ld", data.size(), cid_to_rank.size());
 
 
     // init the Zoltan mesh
@@ -611,7 +605,7 @@ void update_cid_to_rank_vector(diy::mpi::communicator &world, std::map<int, std:
 
 }
 
-void get_nbrs_of_cell(int cid, std::vector<int>& nbrs, bbounds &bnd, bbounds &dom, int C, int rank){
+void get_nbrs_of_cell(int cid, std::vector<int>& nbrs, bbounds &bnd, bbounds &dom, int* C, int rank){
 
     // to do 
     // pass in global bounds, use it's cside and also check if it is inside
@@ -656,7 +650,7 @@ void get_nbrs_of_cell(int cid, std::vector<int>& nbrs, bbounds &bnd, bbounds &do
 }
 
 
-void id_ghost_cells(std::map<int, std::vector<float>> &data, std::map<int, std::vector<float>> &data_ghost, std::map<int, bbounds> &bounds, bbounds &dom, int C, int rank){
+void id_ghost_cells(std::map<int, std::vector<float>> &data, std::map<int, std::vector<float>> &data_ghost, std::map<int, bbounds> &bounds, bbounds &dom, int *C, int rank){
 
     std::queue<int> queue;
 
@@ -709,11 +703,11 @@ void id_ghost_cells(std::map<int, std::vector<float>> &data, std::map<int, std::
         data_ghost.insert(std::make_pair(cid, tmp));
         
     }
-     dprint("ghost cids %ld, rank %d", ghost_cids.size(), rank);
+    //  dprint("ghost cids %ld, rank %d", ghost_cids.size(), rank);
 }
 
 
-void get_ghost_cells(diy::Master &master, const diy::RoundRobinAssigner &assigner, int N, bbounds &dom, int C, int rank){
+void get_ghost_cells(diy::Master &master, const diy::RoundRobinAssigner &assigner, int N, bbounds &dom, int *C, int rank){
 
 
     // id ghost cells
@@ -832,3 +826,49 @@ void update_mesh_data(BBlock *b){
 
 }
 
+
+void set_C(int nblocks, int *C){
+
+    switch(nblocks){
+
+        case 8:
+             C[0] = 4; C[1] = 4; C[2] = 4; 
+             break;
+        
+        case 16:
+             C[0] = 8; C[1] = 4; C[2] = 4; 
+            break;
+
+        case 32:
+            C[0] = 8; C[1] = 8; C[2] = 4; 
+            break;
+
+        case 64:
+            C[0] = 8; C[1] = 8; C[2] = 8; 
+            break;
+
+        case 128:
+            C[0] = 16; C[1] = 8; C[2] = 8; 
+            break;
+        
+        case 256:
+            C[0] = 16; C[1] = 16; C[2] = 8; 
+            break;
+        
+        case 512:
+            C[0] = 16; C[1] = 16; C[2] = 16; 
+            break;
+
+        case 1024:
+            C[0] = 32; C[1] = 16; C[2] = 16; 
+            break;
+        
+        case 2048:
+            C[0] = 32; C[1] = 32; C[2] = 16; 
+            break;
+
+        default:
+            C[0] = 4; C[1] = 4; C[2] = 4; 
+
+    }
+}

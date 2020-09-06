@@ -156,7 +156,7 @@ void remote_deq(BBlock* b, const diy::Master::ProxyWithLink& cp)
             // int recvd_data;
             datablock recvd_data;
             cp.dequeue(incoming_gids[i], recvd_data);
-            fmt::print(stderr, "Remote dequeue: gid {} received value {} from gid {}\n", cp.gid(), recvd_data.data.size(), recvd_data.from_proc);
+            // fmt::print(stderr, "Remote dequeue: gid {} received value {} from gid {}\n", cp.gid(), recvd_data.data.size(), recvd_data.from_proc);
             for (size_t i=0; i<recvd_data.cgid.size(); i++){
                 b->data[recvd_data.cgid[i]] = recvd_data.data[i];
                 b->particles[recvd_data.cgid[i]] = std::move(recvd_data.particles[i]);
@@ -413,7 +413,10 @@ int main(int argc, char **argv){
     // cell: smallest unit that can be moved around (formerly block)
     // block: data consisting of multiple cells in a process
 
-    int C = 4; // cells per side of domain
+    int C[3] = {4, 4, 4}; // cells per side of domain
+    set_C(nblocks, C);
+
+
     bbounds dom;
     dom.max[0] = domain.max[0];
     dom.max[1] = domain.max[1];
@@ -425,9 +428,9 @@ int main(int argc, char **argv){
     int N = 1;// depth of ghost region
     
     
-    assert((domain.max[0] - domain.min[0]+1)%(C*C*C) == 0);
-    assert((domain.max[1] - domain.min[1]+1)%(C*C*C) == 0);
-    assert((domain.max[2] - domain.min[2]+1)%(C*C*C) == 0);
+    assert((domain.max[0] - domain.min[0]+1)%(C[0]*C[1]*C[2]) == 0);
+    assert((domain.max[1] - domain.min[1]+1)%(C[0]*C[1]*C[2]) == 0);
+    assert((domain.max[2] - domain.min[2]+1)%(C[0]*C[1]*C[2]) == 0);
 
     // use the partitioner to identify the boundary int value for bottom corner of cell
     // std::map<int, std::vector<float>> data;
@@ -439,12 +442,12 @@ int main(int argc, char **argv){
     // MESH_DATA mesh_data;
 
     master.foreach ([&](BBlock *b, const diy::Master::ProxyWithLink &cp) {
-        dprint("in master");
-        b->cid_to_rank.resize(C*C*C);
-        b->weights.resize(C*C*C);
-        partition(world, dom, C, b->data,  world.rank(), world.size(), b->cid_to_rank, &b->cside[0], b->partn, b->mesh_data, b);
+        // dprint("in master. C={%d %d %d}, nblocks %d", C[0], C[1], C[2], nblocks);
+        b->cid_to_rank.resize(C[0]*C[1]*C[2]);
+        b->weights.resize(C[0]*C[1]*C[2]);
+        partition(world, dom, &C[0], b->data,  world.rank(), world.size(), b->cid_to_rank, &b->cside[0], b->partn, b->mesh_data, b);
 
-        read_data(world, infile.c_str(), b->data, b->weights, C, &b->cside[0], b, dom);
+        read_data(world, infile.c_str(), b->data, b->weights, &C[0], &b->cside[0], b, dom);
 
         // assign and send
         assign(world, b->data, b->particles, b->weights, b->partn, b->mesh_data, b, cp, assigner, b->bounds );
@@ -473,9 +476,9 @@ int main(int argc, char **argv){
         // }
 
       
-        seed(b, dom, C, seed_rate, world.rank());
-        init = b->particles.size();
-        dprint("initialized %ld", init);
+        init = seed(b, dom, &C[0], seed_rate, world.rank());
+        
+        // dprint("initialized %ld", init);
 
         // std::map<int, std::vector<BEndPt>>::iterator it = b->particles.begin();
         // while (it != b->particles.end()){
@@ -511,13 +514,28 @@ int main(int argc, char **argv){
     // get ghost cells based on new partition
     get_ghost_cells(master, assigner, N, dom, C, world.rank());
 
-     master.foreach ([&](BBlock *b, const diy::Master::ProxyWithLink &cp) {
-            dprint("myrank %d, data_ghost %ld", cp.gid(), b->data_ghost.size());
-            // b->data_ghost.clear();
-     });
+    //  master.foreach ([&](BBlock *b, const diy::Master::ProxyWithLink &cp) {
+    //         dprint("myrank %d, data_ghost %ld", cp.gid(), b->data_ghost.size());
+    //         // b->data_ghost.clear();
+    //  });
 
-    int nrounds = 1;
+    
+
+    size_t init_global=0;
+    diy::mpi::all_reduce(world, init, init_global, std::plus<size_t>());
+    size_t done_global=0;
+   
+
+    int nrounds = 20;
     for (int round=0; round<nrounds; round++){
+
+        done_global = 0;
+        diy::mpi::all_reduce(world, done, done_global, std::plus<size_t>());
+        if (done_global==init_global){
+            if (world.rank() == 0)
+            dprint("done %ld init %ld, breaking now", done_global, init_global);
+            break;
+        }
 
         if (world.rank()==0)
             dprint("!! starting round %d", round);
@@ -536,6 +554,7 @@ int main(int argc, char **argv){
                         // dprint("rank %d cid %d numcells %ld, %ld", world.rank(), cid, b->data.size(), b->particles.size());
                         
                     //  }
+                
 
                 // iterate over particles in cell i
                 if (b->particles.find(cid)!=b->particles.end())
@@ -543,45 +562,52 @@ int main(int argc, char **argv){
                     
                     BEndPt &cur_p = b->particles[cid][j];
                     bool finished = false;
+
+                    // if (cur_p.pid != 50430080)
+                    //     continue;
+                    // else{
+                        dprint("pid starting %d (%f %f %f ) in rank %d, round %d pcid %d, nsteps %d", cur_p.pid, cur_p[0], cur_p[1], cur_p[2], world.rank(), round, cur_p.cid, cur_p.nsteps);
+                    // }
                    
                     BEndPt next_p;
-                   
-       
-                        BSegment s(cur_p);
-                        while(badvect_rk1(cur_p, b, dom, C, 0.05, next_p, world.rank())){ // returns false if post cid is not in block
 
-                            nsteps ++;
-                        
-                        
-                            // next_p.nsteps ++;
-                            cur_p = next_p;
-                           
+                    BSegment s(cur_p);
+                    while (badvect_rk1(cur_p, b, dom, &C[0], 0.05, next_p, world.rank()))
+                    { // returns false if post cid is not in block
 
-                            if (check){
-                                BPt p;
-                                p.coords[0] = cur_p[0];
-                                p.coords[1] = cur_p[1];
-                                p.coords[2] = cur_p[2];
-                                s.pts.push_back(p);
-                            }
+                        nsteps++;
 
-                            // check for exit conditions : global bounds and max steps
-                            if (cur_p.nsteps > max_steps || in_global_dom(dom, cur_p)==false){
-                                    finished = true;
-                                    break;
-                            }
-                            // if (next_p.pid == 401)
-                            // dprint("steps %f %f %f, nsteps %d, pcid %d, cid %d", cur_p[0], cur_p[1], cur_p[2], cur_p.nsteps, cur_p.cid, cid);
+                        // next_p.nsteps ++;
+                        cur_p = next_p;
 
+                        if (check)
+                        {
+                            BPt p;
+                            p.coords[0] = cur_p[0];
+                            p.coords[1] = cur_p[1];
+                            p.coords[2] = cur_p[2];
+                            s.pts.push_back(p);
                         }
-                    
+
+                        // check for exit conditions : global bounds and max steps
+                        if (cur_p.nsteps > max_steps || in_global_dom(dom, cur_p) == false)
+                        {
+                            finished = true;
+                            // if (round > 2)
+                                dprint("ending pid %d, %f %f %f, nsteps %d, pcid %d, cid %d, rank %d", cur_p.pid, cur_p[0], cur_p[1], cur_p[2], cur_p.nsteps, cur_p.cid, cid, world.rank());
+                            break;
+                        }
+
+                        // dprint("step pid %d, %f %f %f, nsteps %d, pcid %d, cid %d, rank %d", cur_p.pid, cur_p[0], cur_p[1], cur_p[2], cur_p.nsteps, cur_p.cid, cid, world.rank());
+                        
+                    }
+
                         // push back into segment
                         b->segments.push_back(s);
                     // }
                     // if finished done++ else put in unfinised of the new cell
                     if (finished == true){
                         done++;
-
                     }else{
 
                         // // if in current rank's cell: key is a cid
@@ -592,7 +618,7 @@ int main(int argc, char **argv){
                         else{
                             // if (next_p.pid==401)
                             // if (world.rank()==4)
-                            //     dprint("unfin nonloc cid for rank %d, cid %d, pid %d", world.rank(), next_p.cid, next_p.pid);
+                                dprint("unfin nonloc cid for rank %d, cid %d, pid %d, nsteps %d", world.rank(), next_p.cid, next_p.pid, next_p.nsteps);
                             int to_rank = b->cid_to_rank[next_p.cid];
                             b->unfinished_nonlocal[to_rank].push_back(next_p);
                         }
@@ -655,7 +681,7 @@ int main(int argc, char **argv){
        });
         
        
-       get_ghost_cells(master, assigner, N, dom, C, world.rank());
+       get_ghost_cells(master, assigner, N, dom, &C[0], world.rank());
         
     //    master.foreach ([&](BBlock *b, const diy::Master::ProxyWithLink &cp) {
     //         // dprint("myrankinloop2 %d, data_ghost %ld", cp.gid(), b->data_ghost.size());
@@ -670,11 +696,7 @@ int main(int argc, char **argv){
     size_t nsteps_global=0;
     diy::mpi::reduce(world, nsteps, nsteps_global, 0, std::plus<size_t>());
 
-    size_t done_global=0;
-    diy::mpi::reduce(world, done, done_global, 0, std::plus<size_t>());
-
-    size_t init_global=0;
-    diy::mpi::reduce(world, init, init_global, 0, std::plus<size_t>());
+    
 
     if (world.rank()==0){
         dprint("nsteps_global %ld, init_global %ld, done_global %ld", nsteps_global, init_global, done_global);

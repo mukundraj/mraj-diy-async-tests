@@ -8,7 +8,7 @@ static void handle_error(int status, int lineno)
     MPI_Abort(MPI_COMM_WORLD, 1);
 }
 
-void read_data(diy::mpi::communicator& world, const char*  infile, std::map<int, std::vector<float>> &data, std::vector<int> &weights, int C, int *cside, BBlock *b, bbounds &dom){
+void read_data(diy::mpi::communicator& world, const char*  infile, std::map<int, std::vector<float>> &data, std::vector<int> &weights, int* C, int *cside, BBlock *b, bbounds &dom){
 
     for(size_t i=0; i<weights.size(); i++){
         weights[i] = 1;
@@ -34,15 +34,15 @@ void read_data(diy::mpi::communicator& world, const char*  infile, std::map<int,
     while (it != data.end()){
 
         int i = it->first;
-        int ix = i%C;
-        int iy = i%(C*C)/C;
-        int iz = i/(C*C);
+        int ix = i%C[0];
+        int iy = i%(C[0]*C[1])/C[0];
+        int iz = i/(C[0]*C[1]);
 
         
        
 
         MPI_Offset count[3];
-        // count[0] = bside[2]; // x
+        // count[0] = bside[2]; // xa
         // count[1] = bside[1];  // y
         // count[2] = bside[0]; // z (slowest changing)
         MPI_Offset start [3];
