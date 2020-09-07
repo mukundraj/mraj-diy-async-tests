@@ -21,6 +21,9 @@ struct bbounds{
     int min[3];
     int cside[3];
 
+
+
+
 };
 
 // namespace diy

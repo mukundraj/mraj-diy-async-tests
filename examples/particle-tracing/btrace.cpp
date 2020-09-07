@@ -525,6 +525,8 @@ int main(int argc, char **argv){
     diy::mpi::all_reduce(world, init, init_global, std::plus<size_t>());
     size_t done_global=0;
    
+     world.barrier();
+     double time_start = MPI_Wtime();
 
     int nrounds = 20;
     for (int round=0; round<nrounds; round++){
@@ -539,6 +541,9 @@ int main(int argc, char **argv){
 
         if (world.rank()==0)
             dprint("!! starting round %d", round);
+
+
+       
 
         master.foreach ([&](BBlock *b, const diy::Master::ProxyWithLink &cp) {
 
@@ -692,14 +697,22 @@ int main(int argc, char **argv){
 
     }
 
+    world.barrier();
+    double time_end = MPI_Wtime();
+    time_total = time_end - time_start;
+
     
     size_t nsteps_global=0;
     diy::mpi::reduce(world, nsteps, nsteps_global, 0, std::plus<size_t>());
 
+
+    size_t maxsteps_global=0;
+    diy::mpi::reduce(world, nsteps, maxsteps_global, 0, diy::mpi::maximum<size_t>());
+
     
 
     if (world.rank()==0){
-        dprint("nsteps_global %ld, init_global %ld, done_global %ld", nsteps_global, init_global, done_global);
+        dprint("results, worldsize, %d, nsteps_global, %ld, init_global, %ld, done_global, %ld, time_total, %f, maxsteps_global, %ld,", world.size(), nsteps_global, init_global, done_global, time_total, maxsteps_global);
     }
   
    

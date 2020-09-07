@@ -28,8 +28,23 @@ maxs="511 511 511"
 # without prediction
 prediction=0
 
-num_procs=8
-opts="--blocks 8 --max-rounds 9999 --synthetic 0 --check 0"
+# num_procs=8
+# opts="--blocks 8 --max-rounds 9999 --synthetic 0 --check 0"
+# args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+# mpiexec -n $num_procs $exe $args
+
+# num_procs=16
+# opts="--blocks 16 --max-rounds 9999 --synthetic 0 --check 0"
+# args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+# mpiexec -n $num_procs $exe $args
+
+# num_procs=32
+# opts="--blocks 32 --max-rounds 9999 --synthetic 0 --check 0"
+# args="$opts $infile $max_steps $sr $mins $maxs $prediction"
+# mpiexec -n $num_procs $exe $args
+
+num_procs=64
+opts="--blocks 64 --max-rounds 9999 --synthetic 0 --check 0"
 args="$opts $infile $max_steps $sr $mins $maxs $prediction"
 mpiexec -n $num_procs $exe $args
 

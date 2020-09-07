@@ -45,7 +45,7 @@ install(TARGETS ptrace-exchange
         GROUP_READ GROUP_WRITE GROUP_EXECUTE
         WORLD_READ WORLD_WRITE WORLD_EXECUTE)
 
-install(FILES PLUME_TEST TORNADO_TEST NEK_TEST1 plot_counters.py compare_segments.py bebop0.sh bebop1.sh scripts/theta1.sh scripts/bebop_isabel.sh scripts/baseline.sh
+install(FILES PLUME_TEST TORNADO_TEST NEK_TEST1 plot_counters.py compare_segments.py bebop0.sh bebop1.sh scripts/theta1.sh scripts/bebop_isabel.sh scripts/baseline.sh scripts/bebop_baseline.sh
         DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/particle-tracing
         PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
         GROUP_READ GROUP_WRITE GROUP_EXECUTE
